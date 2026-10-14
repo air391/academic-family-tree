@@ -4,30 +4,27 @@
 
 **线上前端**：GitHub Pages（`docs/` 目录）
 **云端数据库**：Turso（libSQL/SQLite），schema 见 `schema.sql`
-**当前数据**：990 人 / 908 边（清华大学工程物理系 2011 年后公开博士论文，66 人含院士/将军/教授身份富化；数据库重建后树按已核实师承链合并为 82 棵）
+**当前数据**：990 人 / 908 边（清华大学工程物理系 2011 年后公开博士论文，66 人含院士/将军/教授身份富化；按已核实师承链合并为 82 棵树）
 
 ## 仓库结构
 
 ```
-├── docs/                          # GitHub Pages 前端（workflow 自动生成，勿手改）
+├── docs/                     # GitHub Pages 前端（workflow 自动生成，勿手改）
 ├── pipeline/
-│   ├── runner.py                  # 调度器（读 sources.yaml，幂等 upsert 到 Turso）
-│   ├── turso_client.py            # libSQL HTTP 客户端（纯标准库）
-│   ├── pages_export.py            # 从 Turso 重建谱系树 → 生成 docs/index.html
-│   ├── template.html              # 前端模板（%DATA% 占位）
-│   ├── crawl.yml.tpl              # workflow 模板（%%TURSO_URL%% 占位）
-│   ├── bootstrap_workflow.py      # 首次运行：由模板生成正式 workflow
-│   ├── sources.yaml               # 数据源注册表（加源 = 加适配器 + 加配置）
-│   └── adapters/                  # thu_etds（已验证）/ wikidata（CC0）
-├── schema.sql                     # 建表语句（Turso/本地 SQLite 通用）
-└── .github/workflows/bootstrap.yml # 一次性引导（生成正式 workflow）
+│   ├── runner.py             # 调度器（读 sources.yaml，幂等 upsert 到 Turso）
+│   ├── turso_client.py       # libSQL HTTP 客户端（纯标准库）
+│   ├── pages_export.py       # 从 Turso 重建谱系树 → 生成 docs/index.html
+│   ├── template.html         # 前端模板（%DATA% 占位）
+│   ├── sources.yaml          # 数据源注册表（加源 = 加适配器 + 加配置）
+│   └── adapters/             # thu_etds（已验证）/ wikidata（CC0）
+└── schema.sql                # 建表语句（Turso/本地 SQLite 通用）
 ```
 
 ## 首次启用（全部手动触发，无任何定时任务）
 
-1. **配 Secrets**：Settings → Secrets and variables → Actions，添加 `TURSO_DATABASE_URL` 与 `TURSO_AUTH_TOKEN`
-2. **运行 bootstrap**：Actions → `bootstrap` → Run workflow——它会从模板生成正式工作流 `genealogy-manual-run.yml`（一次性）
-3. **首次采集**：Actions → `genealogy-manual-run` → Run workflow——增量采集、重建谱系树、生成 `docs/index.html` 并提交回本仓库
+1. **配 Secrets**：Settings → Secrets and variables → Actions → New repository secret，添加 `TURSO_DATABASE_URL` 与 `TURSO_AUTH_TOKEN`（Turso 面板获取）
+2. **建工作流**：Actions → New workflow → 选 **set up a workflow yourself** → 把部署包里的 `genealogy-manual-run.yml` 全文粘贴进去 → Commit changes
+3. **首次采集**：Actions → `genealogy-manual-run` → **Run workflow**——增量采集、重建谱系树、生成 `docs/index.html` 并提交回本仓库
 4. **开 Pages**：Settings → Pages → Source 选 **Deploy from a branch** → `main` / `/docs` → Save。几分钟后 https://air391.github.io/academic-family-tree/ 上线
 
 之后每次点 Run workflow：数据库增量更新 + 前端自动刷新。
