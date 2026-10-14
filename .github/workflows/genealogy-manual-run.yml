@@ -1,0 +1,59 @@
+# 手动触发的云端任务：增量采集 -> 重建谱系树 -> 刷新 Pages 前端
+# 部署方法：GitHub 仓库 Actions -> New workflow -> set up a workflow yourself
+#           -> 删除默认内容，粘贴本文件全文 -> Commit changes
+# 前置：Settings -> Secrets and variables -> Actions 中已配置
+#       TURSO_DATABASE_URL 与 TURSO_AUTH_TOKEN
+# 触发方式：Actions -> genealogy-manual-run -> Run workflow（无任何定时计划）
+name: genealogy-manual-run
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write           # 允许回写生成的 docs/index.html
+
+jobs:
+  crawl-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install -r pipeline/requirements.txt
+      - name: Run incremental adapters
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: python3 pipeline/runner.py
+      - name: Rebuild frontend from Turso
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: python3 pipeline/pages_export.py
+      - name: Commit updated frontend (if changed)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/index.html
+          if git diff --cached --quiet; then
+            echo "前端无变化，跳过提交"
+          else
+            git commit -m "chore: rebuild frontend from Turso [skip ci]"
+            git push
+          fi
+      - name: Report row counts
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          python3 - <<'EOF'
+          import sys; sys.path.insert(0, 'pipeline')
+          from turso_client import TursoClient
+          c = TursoClient()
+          p, e = c.query("SELECT (SELECT COUNT(*) FROM persons),(SELECT COUNT(*) FROM mentorship_edges)")[0]
+          print(f"云端库当前: {p} 人 / {e} 边")
+          for row in c.query("SELECT source_name,last_run_at,records_new,last_status FROM source_state"):
+              print("  源状态:", row)
+          EOF
