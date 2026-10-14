@@ -47,19 +47,27 @@ def main():
         recs = list(adapter.fetch(cursor))
         persons, edges = adapter.to_persons_edges(recs)
         print(f"  本轮拉到 {len(recs)} 条 -> {len(persons)} 人 / {len(edges)} 边")
+        if not recs:
+            print("  警告：0 条记录，可能被远端拒绝或确无新增；游标不推进，数据无缺口")
 
         if args.dry_run:
             continue
-        upsert_persons(client, persons, now)
-        upsert_edges(client, edges, now)
+        if recs:
+            upsert_persons(client, persons, now)
+            upsert_edges(client, edges, now)
 
-        new_cursor = adapter.next_cursor(cursor, recs) if hasattr(adapter, "next_cursor") else now[:10]
+        # 游标推进：适配器自定义逻辑优先；无新增时一律不推进（防数据缺口）
+        if hasattr(adapter, "next_cursor"):
+            new_cursor = adapter.next_cursor(cursor, recs, now)
+        else:
+            new_cursor = now[:10] if recs else cursor
+        status = "success" if recs else "no_records"
         client.exec([f"""INSERT INTO source_state(source_name,cursor,last_run_at,last_status,records_seen,records_new)
-VALUES ('{src['name']}',{repr(new_cursor)},'{now}','success',{len(recs)},{len(recs)})
+VALUES ('{src['name']}',{repr(new_cursor)},'{now}','{status}',{len(recs)},{len(recs)})
 ON CONFLICT(source_name) DO UPDATE SET cursor=excluded.cursor,
-last_run_at=excluded.last_run_at, last_status='success',
+last_run_at=excluded.last_run_at, last_status=excluded.last_status,
 records_seen=records_seen+excluded.records_seen, records_new=excluded.records_new"""])
-        print(f"  游标推进至 {new_cursor}")
+        print(f"  游标: {cursor!r} -> {new_cursor!r} ({status})")
 
 
 if __name__ == "__main__":

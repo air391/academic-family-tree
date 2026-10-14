@@ -1,14 +1,13 @@
+"""libSQL/Turso HTTP 客户端 — 仅标准库，任何环境可直接用。
+
+环境变量:
+  TURSO_DATABASE_URL  形如 https://xxx.turso.io（libsql:// 开头会自动转 https）
+  TURSO_AUTH_TOKEN    数据库级 rw token
+"""
 import json, os, urllib.request
 
 
 class TursoClient:
-    """libSQL/Turso HTTP 客户端 — 仅标准库，任何环境可直接用。
-
-    环境变量:
-      TURSO_DATABASE_URL  形如 https://xxx.turso.io（libsql:// 开头会自动转 https）
-      TURSO_AUTH_TOKEN    数据库级 rw token
-    """
-
     def __init__(self, url=None, token=None):
         url = url or os.environ["TURSO_DATABASE_URL"]
         if url.startswith("libsql://"):
@@ -55,7 +54,7 @@ def upsert_persons(client, persons, now):
     for p in persons:
         stmts.append(
             f"""INSERT INTO persons(id,name,alias,institution_id,title,affiliation,honor,source,first_seen_at,last_seen_at)
-VALUES ({esc(p[0])},{esc(p[1])},{esc(p[2])},{p[3]},{esc(p[4])},{esc(p[5])},{esc(p[6])},{esc(p[7])},'{now}','{now}')
+VALUES ({esc(p[0])},{esc(p[1])},{esc(p[2])},{esc(p[3])},{esc(p[4])},{esc(p[5])},{esc(p[6])},{esc(p[7])},'{now}','{now}')
 ON CONFLICT(id) DO UPDATE SET title=excluded.title, affiliation=excluded.affiliation,
 honor=excluded.honor, last_seen_at=excluded.last_seen_at""")
     for i in range(0, len(stmts), 100):
