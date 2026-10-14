@@ -58,7 +58,7 @@ svg{width:100%;height:100%;cursor:grab}
 <div id="canvaswrap">
 <svg id="svg" xmlns="http://www.w3.org/2000/svg"><g id="viewport"></g></svg>
 <div id="panel"></div>
-<div id="hint">滚轮缩放 · 拖拽平移 · 点击节点展开/折叠 · 点击节点可查云端实时师承 · 右侧列表切换树</div>
+<div id="hint">滚轮缩放 · 拖拽平移 · 点击节点展开/折叠 · 金色徽章=院士或将军 · 右侧列表切换树</div>
 </div>
 </main>
 <script>
@@ -66,7 +66,7 @@ const DATA = %DATA%
 const GEN = ['#c0392b','#e67e22','#27ae60','#2980b9','#8e44ad'];
 const HONOR_KW = ['院士','少将','中将'];
 const FLAT = [];
-DATA.forEach(t => { (function w(n){ FLAT.push({n, t}); (n.children||[]).forEach(w); })(t.tree); });
+DATA.forEach(t => { (function w(n){ if(!n.virtual) FLAT.push({n, t}); (n.children||[]).forEach(w); })(t.tree); });
 const SRC_LABEL = {thu_etds:'高校学位论文库', wikidata:'WikiData', csv_import:'CSV 导入', oai_pmh:'机构库 OAI'};
 const srcc = {};
 FLAT.forEach(o=>{ const s=o.n.src||'其他'; srcc[s]=(srcc[s]||0)+1; });
@@ -104,17 +104,21 @@ function render(){
   const link=document.createElementNS('http://www.w3.org/2000/svg','g');
   (function drawLinks(n,d){
     (n.children||[]).filter(c=>!collapsed.has(c.name+'|'+(d+1))).forEach(c=>{
-      const p1=pos.find(o=>o.n===n), p2=pos.find(o=>o.n===c);
-      const l=document.createElementNS('http://www.w3.org/2000/svg','path');
-      l.setAttribute('class','link');
-      l.setAttribute('d',`M${X(p1.depth)+70},${Y(p1.y)} C${X(p1.depth)+130},${Y(p1.y)} ${X(p2.depth)-60},${Y(p2.y)} ${X(p2.depth)},${Y(p2.y)}`);
-      link.appendChild(l); drawLinks(c,d+1);
+      if(!n.virtual){
+        const p1=pos.find(o=>o.n===n), p2=pos.find(o=>o.n===c);
+        const l=document.createElementNS('http://www.w3.org/2000/svg','path');
+        l.setAttribute('class','link');
+        l.setAttribute('d',`M${X(p1.depth)+70},${Y(p1.y)} C${X(p1.depth)+130},${Y(p1.y)} ${X(p2.depth)-60},${Y(p2.y)} ${X(p2.depth)},${Y(p2.y)}`);
+        link.appendChild(l);
+      }
+      drawLinks(c,d+1);
     });
   })(cur.tree,0);
   vp.appendChild(link);
   // nodes
   const g=document.createElementNS('http://www.w3.org/2000/svg','g');
   pos.forEach(o=>{
+    if(o.n.virtual) return;   // 虚拟包装节点只参与布局，不画出来
     const grp=document.createElementNS('http://www.w3.org/2000/svg','g');
     grp.setAttribute('class','node');
     grp.setAttribute('transform',`translate(${X(o.depth)},${Y(o.y)})`);
@@ -203,7 +207,7 @@ document.getElementById('search').addEventListener('input',e=>{
         document.querySelectorAll('.titem').forEach((x,i)=>x.classList.toggle('active', DATA.slice().sort((a,b)=>b.size-a.size)[i]===cur)); }
       render();
       const el=document.querySelector(`.node[data-name="${hit.n.name}"]`);
-      if(el){ el.classList.remove('dim'); }
+      if(el){ el.classList.remove('dim'); el.scrollIntoView?null:null; }
     }
   }
 });
@@ -211,7 +215,7 @@ document.getElementById('search').addEventListener('input',e=>{
 // ===== 云端实时查询（只读 token；留空则仅用本地快照）=====
 // 生成只读 token（90 天有效，可随时在 Turso 控制台吊销）：
 //   turso db tokens create academic-family-tree --read-only --expiration 90d
-// 吊销（会同时吊销库内所有 token，需重新配置 workflow 密钥）:
+// 吊销（会同时吊销库内所有 token，需重新配置 workflow 密钥）：
 //   turso db tokens invalidate academic-family-tree
 const RO_TOKEN = "";
 const DB_HTTP = "https://academic-family-tree-zhott6oco.aws-ap-northeast-1.turso.io";
@@ -248,13 +252,13 @@ async function cloudLineage(name){
   const out = [];
   for(const [pid, nm, disp, title, aff] of rows.slice(0,3)){
     const chain = [disp + (aff?`（${aff}）`:'')];
-    let curp = pid, seen = new Set([pid]);
+    let cur = pid, seen = new Set([pid]);
     for(let d=0; d<10; d++){
-      const ups = await cloudNeighbors(curp, 'up');
+      const ups = await cloudNeighbors(cur, 'up');
       if(!ups.length) break;
-      curp = ups[0][0];
-      if(seen.has(curp)) break;
-      seen.add(curp);
+      cur = ups[0][0];
+      if(seen.has(cur)) break;
+      seen.add(cur);
       chain.push(ups[0][1]);
     }
     const stus = await cloudNeighbors(pid, 'down');
