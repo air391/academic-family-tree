@@ -11,15 +11,18 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from turso_client import TursoClient
 
+GEN_FIELDS = ("title", "affiliation", "honor", "source")
+
 
 def build_trees(persons, edges):
     """persons: {pid: {...}}, edges: [(advisor, student)] -> 前端所需 tree 列表"""
-    adj = collections.defaultdict(list)
+    adj = collections.defaultdict(list)      # advisor -> students
     advisors_of = collections.defaultdict(list)
     for a, s in edges:
         adj[a].append(s)
         advisors_of[s].append(a)
 
+    # 并查集：连通分量 = 树
     parent = {p: p for p in persons}
 
     def find(x):
@@ -37,6 +40,7 @@ def build_trees(persons, edges):
     for p in persons:
         comps[find(p)].append(p)
 
+    # 代际：从"从未当学生的人"（gen-0 根）BFS
     gen = {}
     dq = collections.deque()
     for p in persons:
@@ -49,10 +53,11 @@ def build_trees(persons, edges):
             if v not in gen:
                 gen[v] = gen[u] + 1
                 dq.append(v)
-    for p in persons:
+    for p in persons:                       # 防御环
         gen.setdefault(p, 0)
 
     def disp(pid):
+        """前端节点名：有同名区分的用 '姓名@导师'（与原始数据格式一致），否则用姓名"""
         p = persons[pid]
         return p["alias"] or p["name"]
 
@@ -73,14 +78,16 @@ def build_trees(persons, edges):
     trees = []
     for members in comps.values():
         roots = sorted(p for p in members if gen[p] == 0)
-        if not roots:
+        if not roots:                       # 全是环时兜底
             roots = [min(members)]
         forest = [node(r) for r in roots]
         if len(forest) == 1:
             t = forest[0]
-        else:
-            t = {"name": f"{len(roots)}位导师",
-                 "gen": -1, "virtual": True, "children": forest}
+        else:                               # 多根分量包一层虚拟根
+            depth = max(gen[p] for p in members)
+            t = {"name": roots[0] if len(roots) == 1 else f"{len(roots)}位导师",
+                 "gen": -1, "virtual": True,
+                 "children": forest}
             for f in forest:
                 f["gen"] = 0
         size = len(members)
@@ -109,7 +116,30 @@ def main():
 
     here = os.path.dirname(os.path.abspath(__file__))
     template = open(os.path.join(here, "template.html")).read()
-    out = template.replace("%DATA%", json.dumps(trees, ensure_ascii=False))
+    def dump_node(n):
+        kids = n.get("children") or []
+        base = json.dumps({k: v for k, v in n.items() if k != "children"},
+                          ensure_ascii=False, separators=(",", ":"))
+        if not kids:
+            return base[:-1] + ',"children":[]}'
+        return base[:-1] + ',"children":[\n' + ",\n".join(dump_node(c) for c in kids) + "\n]}"
+
+    def dump_list(key, lst):
+        if not lst:
+            return f'"{key}":[]'
+        return f'"{key}":[\n' + ",\n".join(json.dumps(x, ensure_ascii=False) for x in lst) + "\n]"
+
+    def dump_tree(t):
+        meta = {k: v for k, v in t.items() if k not in ("roots", "level2", "tree")}
+        base = json.dumps(meta, ensure_ascii=False, separators=(",", ":"))[:-1] + ","
+        parts = [base + dump_list("roots", t["roots"]),
+                 dump_list("level2", t["level2"]),
+                 '"tree":' + dump_node(t["tree"])]
+        return ",\n".join(parts) + "}"
+
+    # 每个节点/列表项独占一行：换行只出现在 token 之间（JSON/JS 均合法），避免超长行
+    payload = "[\n" + ",\n".join(dump_tree(t) for t in trees) + "\n]"
+    out = template.replace("%DATA%", payload)
     os.makedirs(os.path.join(here, "..", "docs"), exist_ok=True)
     dest = os.path.normpath(os.path.join(here, "..", "docs", "index.html"))
     open(dest, "w").write(out)
