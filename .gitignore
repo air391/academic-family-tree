@@ -1,1 +1,4 @@
-PLACEHOLDER_GITIGNORE
+__pycache__/
+*.pyc
+.env
+.DS_Store

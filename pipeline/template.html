@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清华工物系博士谱系树（2011年后·909条公开学位论文）</title>
+<style>
+:root{--c0:#c0392b;--c1:#e67e22;--c2:#27ae60;--c3:#2980b9;--c4:#8e44ad;
+--bg:#f7f6f3;--panel:#fff;--ink:#222;--mut:#888;--line:#e2ddd4;--acc:#8a1f1f;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Noto Sans CJK SC","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{padding:10px 18px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+header h1{font-size:17px;color:var(--acc)}
+header .stats{font-size:12.5px;color:var(--mut)}
+#search{padding:6px 10px;border:1px solid var(--line);border-radius:6px;width:200px;font-size:13px}
+#legend{display:flex;gap:10px;font-size:12px;color:var(--mut);align-items:center}
+#legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:3px;vertical-align:-1px}
+main{flex:1;display:flex;min-height:0}
+#sidebar{width:300px;background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:10px}
+#sidebar h2{font-size:13px;color:var(--mut);margin:4px 2px 8px;position:sticky;top:0;background:var(--panel)}
+.titem{padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;line-height:1.5}
+.titem:hover{background:#f0ece4}
+.titem.active{background:#f6e8e5;outline:1px solid var(--acc)}
+.titem b{color:var(--acc)}
+.titem .meta{color:var(--mut);font-size:11.5px}
+#canvaswrap{flex:1;position:relative;overflow:hidden}
+svg{width:100%;height:100%;cursor:grab}
+.node circle{stroke:#fff;stroke-width:1.5px;cursor:pointer}
+.node text{font-size:11.5px;fill:var(--ink);pointer-events:none}
+.node .tag{font-size:9.5px;fill:#fff;font-weight:bold}
+.node.dim{opacity:.15}
+.link{fill:none;stroke:#cbb;stroke-width:1.2px}
+#panel{position:absolute;top:12px;right:12px;width:290px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;box-shadow:0 4px 18px rgba(0,0,0,.08);display:none;font-size:13px;max-height:calc(100% - 24px);overflow-y:auto}
+#panel h3{font-size:15px;color:var(--acc);margin-bottom:6px}
+#panel .kv{margin:5px 0;line-height:1.55}
+#panel .k{color:var(--mut);font-size:11.5px}
+.hbadge{display:inline-block;background:linear-gradient(135deg,#b8860b,#d4a017);color:#fff;font-size:10.5px;border-radius:8px;padding:1px 7px;margin-left:5px;vertical-align:1px}
+#hint{position:absolute;bottom:10px;left:12px;font-size:11px;color:var(--mut);background:rgba(255,255,255,.85);padding:4px 8px;border-radius:6px}
+</style>
+</head>
+<body>
+<header>
+<h1>清华工物系博士谱系树 · 公开数据补全版</h1>
+<span class="stats" id="hstats"></span>
+<input id="search" placeholder="搜索人名（如：康克军）…">
+<span id="legend">
+<i style="background:var(--c0)"></i>第0代(导师之导师)
+<i style="background:var(--c1)"></i>第1代(博导)
+<i style="background:var(--c2)"></i>第2代
+<i style="background:var(--c3)"></i>第3代
+<i style="background:var(--c4)"></i>第4代
+｜ <span title="金色徽章=两院院士/将军">🏅=院士/将军</span>
+</span>
+</header>
+<main>
+<div id="sidebar"><h2>谱系树（按规模排序）</h2><div id="treelist"></div></div>
+<div id="canvaswrap">
+<svg id="svg" xmlns="http://www.w3.org/2000/svg"><g id="viewport"></g></svg>
+<div id="panel"></div>
+<div id="hint">滚轮缩放 · 拖拽平移 · 点击节点展开/折叠 · 金色徽章=院士或将军 · 右侧列表切换树</div>
+</div>
+</main>
+<script>
+const DATA = %DATA%
+const GEN = ['#c0392b','#e67e22','#27ae60','#2980b9','#8e44ad'];
+const HONOR_KW = ['院士','少将','中将'];
+const FLAT = [];
+DATA.forEach(t => { (function w(n){ FLAT.push({n, t}); (n.children||[]).forEach(w); })(t.tree); });
+document.getElementById('hstats').textContent =
+  `${DATA.length} 棵树 · ${FLAT.length} 个节点 · 数据：公开学位论文与公开网页`;
+
+let cur = DATA.slice().sort((a,b)=>b.size-a.size)[0];
+let collapsed = new Set();
+let transform = {x:60,y:40,k:1};
+
+function layout(tree){
+  const pos=[]; const map=new Map(); let y=0;
+  function place(n, depth){
+    const kids=(n.children||[]).filter(c=>!collapsed.has(c.name+'|'+(depth+1)));
+    const o={n,depth,y:0};
+    pos.push(o); map.set(n,o);
+    if(!kids.length){ o.y=y++; return; }
+    kids.forEach(c=>place(c,depth+1));
+    o.y=kids.reduce((s,c)=>s+map.get(c).y,0)/kids.length;
+  }
+  place(tree,0);
+  return pos;
+}
+
+function render(){
+  const pos = layout(cur.tree);
+  const vp = document.getElementById('viewport');
+  vp.innerHTML='';
+  const X = d => 40 + d*190, Y = y => 30 + y*34;
+  const link=document.createElementNS('http://www.w3.org/2000/svg','g');
+  (function drawLinks(n,d){
+    (n.children||[]).filter(c=>!collapsed.has(c.name+'|'+(d+1))).forEach(c=>{
+      const p1=pos.find(o=>o.n===n), p2=pos.find(o=>o.n===c);
+      const l=document.createElementNS('http://www.w3.org/2000/svg','path');
+      l.setAttribute('class','link');
+      l.setAttribute('d',`M${X(p1.depth)+70},${Y(p1.y)} C${X(p1.depth)+130},${Y(p1.y)} ${X(p2.depth)-60},${Y(p2.y)} ${X(p2.depth)},${Y(p2.y)}`);
+      link.appendChild(l); drawLinks(c,d+1);
+    });
+  })(cur.tree,0);
+  vp.appendChild(link);
+  const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+  pos.forEach(o=>{
+    const grp=document.createElementNS('http://www.w3.org/2000/svg','g');
+    grp.setAttribute('class','node');
+    grp.setAttribute('transform',`translate(${X(o.depth)},${Y(o.y)})`);
+    grp.dataset.name=o.n.name;
+    const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('r',13); c.setAttribute('fill',GEN[o.depth%5]);
+    grp.appendChild(c);
+    if(o.n.honor && HONOR_KW.some(k=>o.n.honor.includes(k))){
+      const b=document.createElementNS('http://www.w3.org/2000/svg','circle');
+      b.setAttribute('cx',10); b.setAttribute('cy',-10); b.setAttribute('r',6.5);
+      b.setAttribute('fill','#d4a017'); b.setAttribute('stroke','#fff');
+      grp.appendChild(b);
+      const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+      t.setAttribute('x',10); t.setAttribute('y',-6.5); t.setAttribute('text-anchor','middle');
+      t.setAttribute('class','tag'); t.textContent='院';
+      grp.appendChild(t);
+    }
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x',19); t.setAttribute('y',4); t.textContent=o.n.name.split('@')[0];
+    grp.appendChild(t);
+    grp.addEventListener('click',ev=>{
+      ev.stopPropagation();
+      const key=o.n.name+'|'+o.depth;
+      const hasKids=(o.n.children||[]).length>0;
+      if(hasKids){ collapsed.has(key)?collapsed.delete(key):collapsed.add(key); render(); }
+      showPanel(o.n);
+    });
+    g.appendChild(grp);
+  });
+  vp.appendChild(g);
+  apply();
+}
+
+function showPanel(n){
+  const p=document.getElementById('panel');
+  p.style.display='block';
+  p.innerHTML = `<h3>${n.name.split('@')[0]}
+    ${n.honor&&HONOR_KW.some(k=>n.honor.includes(k))?'<span class="hbadge">'+('院士'+(n.honor.includes('将')?'·将军':''))+'</span>':''}</h3>
+    <div class="kv"><span class="k">谱系角色：</span>第 ${n.gen} 代</div>
+    ${n.tag?`<div class="kv"><span class="k">身份：</span>${n.tag}</div>`:''}
+    ${n.aff?`<div class="kv"><span class="k">单位/职务：</span>${n.aff}</div>`:''}
+    ${n.honor?`<div class="kv"><span class="k">荣誉/备注：</span>${n.honor}</div>`:''}
+    ${n.src?`<div class="kv"><span class="k">来源：</span>${n.src}</div>`:''}
+    ${!n.tag?'<div class="kv" style="color:#aaa">该节点暂无公开资料补全（约九成毕业生节点未逐人核实）</div>':''}`;
+}
+
+function apply(){
+  document.getElementById('viewport').setAttribute('transform',
+    `translate(${transform.x},${transform.y}) scale(${transform.k})`);
+}
+
+const svg=document.getElementById('svg');
+let drag=null;
+svg.addEventListener('wheel',e=>{ e.preventDefault();
+  const f=e.deltaY<0?1.12:0.89; transform.k=Math.min(3,Math.max(.25,transform.k*f)); apply(); },{passive:false});
+svg.addEventListener('mousedown',e=>{ drag={x:e.clientX,y:e.clientY}; svg.style.cursor='grabbing'; });
+window.addEventListener('mousemove',e=>{ if(drag){ transform.x+=e.clientX-drag.x; transform.y+=e.clientY-drag.y; drag={x:e.clientX,y:e.clientY}; apply(); }});
+window.addEventListener('mouseup',()=>{ drag=null; svg.style.cursor='grab'; });
+
+const tl=document.getElementById('treelist');
+DATA.slice().sort((a,b)=>b.size-a.size).forEach(t=>{
+  const d=document.createElement('div');
+  d.className='titem'+(t===cur?' active':'');
+  d.innerHTML=`<b>${t.display}</b>　${t.size}人 · ${t.depth}代${t.tree.honor&&HONOR_KW.some(k=>t.tree.honor.includes(k))?' · 🏅':''}<br>
+  <span class="meta">根：${t.roots.join('、')}｜二代：${t.level2.slice(0,3).join('、')}${t.level2.length>3?'…':''}</span>`;
+  d.onclick=()=>{ cur=t; collapsed=new Set(); transform={x:60,y:40,k:1};
+    document.querySelectorAll('.titem').forEach(x=>x.classList.remove('active'));
+    d.classList.add('active'); render(); };
+  tl.appendChild(d);
+});
+
+document.getElementById('search').addEventListener('input',e=>{
+  const q=e.target.value.trim();
+  document.querySelectorAll('.node').forEach(el=>{
+    el.classList.toggle('dim', q && !el.dataset.name.includes(q));
+  });
+  if(q){
+    const hit=FLAT.find(o=>o.n.name.includes(q));
+    if(hit){ collapsed=new Set();
+      if(hit.t!==cur){ cur=hit.t; render();
+        document.querySelectorAll('.titem').forEach((x,i)=>x.classList.toggle('active', DATA.slice().sort((a,b)=>b.size-a.size)[i]===cur)); }
+      render();
+    }
+  }
+});
+
+render();
+</script>
+</body>
+</html>
