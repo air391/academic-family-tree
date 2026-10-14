@@ -217,7 +217,7 @@ document.getElementById('search').addEventListener('input',e=>{
 //   turso db tokens create academic-family-tree --read-only --expiration 90d
 // 吊销（会同时吊销库内所有 token，需重新配置 workflow 密钥）：
 //   turso db tokens invalidate academic-family-tree
-const RO_TOKEN = "";
+const RO_TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicm8iLCJleHAiOjE3OTQ1ODAxODcsImlhdCI6MTc5MTk4ODE4NywiaWQiOiIwMWExM2E3Yi00NDAxLTdkNzItYWQyMS1mZjFkMjY5ZWExMjkiLCJraWQiOiJaSEtWbGNzcmQzeE50UDJ1WGc1UDVXSUdxRzk3Vm5wVGE5TnJNNGF6S2RzIiwicmlkIjoiOWNiNTYxNWItN2VlZC00ZDcyLThkM2EtYzcyNmJhNzI2YTlhIn0.TrqyIIJv6xgYRP3822DxwGDsVcO2RuswxPfXsTyTu1NoD4LI73wTDxK2--VUHkPuKJEEZz0HlH2XGmo3GE0rCg"; // 只读，2026-11-13 到期
 const DB_HTTP = "https://academic-family-tree-zhott6oco.aws-ap-northeast-1.turso.io";
 const liveEl = document.getElementById('livestats');
 if(RO_TOKEN){ liveEl.textContent='· 云端实时查询：已连接（只读）'; liveEl.style.color='#27ae60'; }
