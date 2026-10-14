@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>清华工物系博士谱系树（1984-2025·909条公开学位论文）</title>
+<title>中文学术语承谱系 · Chinese Academic Genealogy</title>
 <style>
 :root{--c0:#c0392b;--c1:#e67e22;--c2:#27ae60;--c3:#2980b9;--c4:#8e44ad;
 --bg:#f7f6f3;--panel:#fff;--ink:#222;--mut:#888;--line:#e2ddd4;--acc:#8a1f1f;}
@@ -40,9 +40,10 @@ svg{width:100%;height:100%;cursor:grab}
 </head>
 <body>
 <header>
-<h1>清华工物系博士谱系树 · 公开数据补全版</h1>
+<h1>中文学术语承谱系 <span style="font-size:12px;color:var(--mut);font-weight:normal">Chinese Academic Genealogy · 公开数据 · 增量构建中</span></h1>
 <span class="stats" id="hstats"></span>
-<input id="search" placeholder="搜索人名（如：康克军）…">
+<span class="stats" id="livestats"></span>
+<input id="search" placeholder="搜索学者姓名（如：康克军）…">
 <span id="legend">
 <i style="background:var(--c0)"></i>第0代(导师之导师)
 <i style="background:var(--c1)"></i>第1代(博导)
@@ -57,7 +58,7 @@ svg{width:100%;height:100%;cursor:grab}
 <div id="canvaswrap">
 <svg id="svg" xmlns="http://www.w3.org/2000/svg"><g id="viewport"></g></svg>
 <div id="panel"></div>
-<div id="hint">滚轮缩放 · 拖拽平移 · 点击节点展开/折叠 · 金色徽章=院士或将军 · 右侧列表切换树</div>
+<div id="hint">滚轮缩放 · 拖拽平移 · 点击节点展开/折叠 · 点击节点可查云端实时师承 · 右侧列表切换树</div>
 </div>
 </main>
 <script>
@@ -66,8 +67,12 @@ const GEN = ['#c0392b','#e67e22','#27ae60','#2980b9','#8e44ad'];
 const HONOR_KW = ['院士','少将','中将'];
 const FLAT = [];
 DATA.forEach(t => { (function w(n){ FLAT.push({n, t}); (n.children||[]).forEach(w); })(t.tree); });
+const SRC_LABEL = {thu_etds:'高校学位论文库', wikidata:'WikiData', csv_import:'CSV 导入', oai_pmh:'机构库 OAI'};
+const srcc = {};
+FLAT.forEach(o=>{ const s=o.n.src||'其他'; srcc[s]=(srcc[s]||0)+1; });
+const srcTxt = Object.entries(srcc).map(([k,v])=>`${SRC_LABEL[k]||k} ${v} 人`).join(' · ');
 document.getElementById('hstats').textContent =
-  `${DATA.length} 棵树 · ${FLAT.length} 个节点 · 数据：清华学位论文系统 909 条公开记录（1984-2025，院系公开库全量）`;
+  `${DATA.length} 棵树 · ${FLAT.length} 位学者 · ${srcTxt}`;
 document.getElementById('trees-h').textContent = DATA.length + ' 棵谱系树（按规模排序）';
 
 let cur = DATA.slice().sort((a,b)=>b.size-a.size)[0];
@@ -135,7 +140,7 @@ function render(){
       const key=o.n.name+'|'+o.depth;
       const hasKids=(o.n.children||[]).length>0;
       if(hasKids){ collapsed.has(key)?collapsed.delete(key):collapsed.add(key); render(); }
-      showPanel(o.n);
+      showCloud(o.n);
     });
     g.appendChild(grp);
   });
@@ -202,6 +207,78 @@ document.getElementById('search').addEventListener('input',e=>{
     }
   }
 });
+
+// ===== 云端实时查询（只读 token；留空则仅用本地快照）=====
+// 生成只读 token（90 天有效，可随时在 Turso 控制台吊销）：
+//   turso db tokens create academic-family-tree --read-only --expiration 90d
+// 吊销（会同时吊销库内所有 token，需重新配置 workflow 密钥）:
+//   turso db tokens invalidate academic-family-tree
+const RO_TOKEN = "";
+const DB_HTTP = "https://academic-family-tree-zhott6oco.aws-ap-northeast-1.turso.io";
+const liveEl = document.getElementById('livestats');
+if(RO_TOKEN){ liveEl.textContent='· 云端实时查询：已连接（只读）'; liveEl.style.color='#27ae60'; }
+else { liveEl.textContent='· 云端实时查询：未配置，仅显示最近快照'; }
+
+function escq(s){ return s.replace(/'/g,"''"); }
+
+async function tursoQuery(sql){
+  const r = await fetch(DB_HTTP+"/v2/pipeline",{method:"POST",
+    headers:{"Authorization":"Bearer "+RO_TOKEN,"Content-Type":"application/json"},
+    body:JSON.stringify({requests:[{type:"execute",stmt:{sql}},{type:"close"}]})});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const j = await r.json();
+  const res = j.results && j.results[0] && j.results[0].response;
+  if(!res || res.type!=='execute') throw new Error('查询失败');
+  return (res.result.rows||[]).map(row=>row.map(c=>c.value));
+}
+
+async function cloudNeighbors(pid, dir){
+  const sql = dir==='up'
+    ? `SELECT a.id, COALESCE(NULLIF(a.alias,''),a.name) FROM mentorship_edges e JOIN persons a ON a.id=e.advisor_id WHERE e.student_id='${escq(pid)}'`
+    : `SELECT s.id, COALESCE(NULLIF(s.alias,''),s.name) FROM mentorship_edges e JOIN persons s ON s.id=e.student_id WHERE e.advisor_id='${escq(pid)}'`;
+  return tursoQuery(sql);
+}
+
+// 从云端实时构建某人的师承链（上溯）与门下（下钻），客户端逐层展开
+async function cloudLineage(name){
+  const rows = await tursoQuery(
+    `SELECT id, name, COALESCE(NULLIF(alias,''),name), COALESCE(NULLIF(title,''),''), COALESCE(NULLIF(affiliation,''),'')
+     FROM persons WHERE name LIKE '%${escq(name)}%' OR alias LIKE '%${escq(name)}%' LIMIT 8`);
+  if(!rows.length) return `<div class="kv" style="color:#aaa">云端数据库未找到“${name}”（可能尚未收录该数据源）</div>`;
+  const out = [];
+  for(const [pid, nm, disp, title, aff] of rows.slice(0,3)){
+    const chain = [disp + (aff?`（${aff}）`:'')];
+    let curp = pid, seen = new Set([pid]);
+    for(let d=0; d<10; d++){
+      const ups = await cloudNeighbors(curp, 'up');
+      if(!ups.length) break;
+      curp = ups[0][0];
+      if(seen.has(curp)) break;
+      seen.add(curp);
+      chain.push(ups[0][1]);
+    }
+    const stus = await cloudNeighbors(pid, 'down');
+    out.push(`<div class="kv"><span class="k">师承链：</span>${chain.join(' ← ')}</div>`);
+    out.push(stus.length
+      ? `<div class="kv"><span class="k">门下（${stus.length}）：</span>${stus.map(s=>s[1]).join('、')}</div>`
+      : `<div class="kv" style="color:#aaa">暂无学生记录</div>`);
+  }
+  return out.join('');
+}
+
+async function showCloud(n){
+  const p = document.getElementById('panel');
+  if(!RO_TOKEN){ showPanel(n); return; }
+  p.style.display='block';
+  p.innerHTML = `<h3>${n.name.split('@')[0]} <span class="hbadge" style="background:#2980b9">云端实时</span></h3><div class="kv" style="color:#888">正在查询云端数据库…</div>`;
+  try {
+    const html = await cloudLineage(n.name.split('@')[0]);
+    p.innerHTML = `<h3>${n.name.split('@')[0]} <span class="hbadge" style="background:#2980b9">云端实时</span></h3>` + html
+      + `<div class="kv" style="color:#bbb;font-size:11px">数据直接来自云端数据库只读查询，可能比左侧快照更新</div>`;
+  } catch(e){
+    showPanel(n);
+  }
+}
 
 render();
 </script>
