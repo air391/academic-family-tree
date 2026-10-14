@@ -12,12 +12,13 @@ sources:
     access_type: public
     url: https://newetds.lib.tsinghua.edu.cn
     rate_limit_s: 1.5        # 礼貌限速：请求间随机延时基数，勿调低（防反爬）
-    schedule: manual         # 手动触发（当前项目纪律：不自动定时）
+    schedule: manual        # 手动触发（workflow_dispatch），不自动跑
     enabled: 1
     config:
       department: 工物系       # 清华系统按院系抓；扩到其他院系改这里
       degree: 博士
-      cursor_start: "2011-01-01"   # 已入库数据的答辩日期起点
+      cursor_start: "1984-01-01"   # 数据集实际起点：系统不支持服务端日期过滤，
+                                   # 909 条 = 1984-2025 全量（"2011年后"系早期误称）
 
   - name: wikidata
     adapter: wikidata

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>清华工物系博士谱系树（2011年后·909条公开学位论文）</title>
+<title>清华工物系博士谱系树（1984-2025·909条公开学位论文）</title>
 <style>
 :root{--c0:#c0392b;--c1:#e67e22;--c2:#27ae60;--c3:#2980b9;--c4:#8e44ad;
 --bg:#f7f6f3;--panel:#fff;--ink:#222;--mut:#888;--line:#e2ddd4;--acc:#8a1f1f;}
@@ -53,7 +53,7 @@ svg{width:100%;height:100%;cursor:grab}
 </span>
 </header>
 <main>
-<div id="sidebar"><h2>谱系树（按规模排序）</h2><div id="treelist"></div></div>
+<div id="sidebar"><h2 id="trees-h"></h2><div id="treelist"></div></div>
 <div id="canvaswrap">
 <svg id="svg" xmlns="http://www.w3.org/2000/svg"><g id="viewport"></g></svg>
 <div id="panel"></div>
@@ -67,7 +67,8 @@ const HONOR_KW = ['院士','少将','中将'];
 const FLAT = [];
 DATA.forEach(t => { (function w(n){ FLAT.push({n, t}); (n.children||[]).forEach(w); })(t.tree); });
 document.getElementById('hstats').textContent =
-  `${DATA.length} 棵树 · ${FLAT.length} 个节点 · 数据：公开学位论文与公开网页`;
+  `${DATA.length} 棵树 · ${FLAT.length} 个节点 · 数据：清华学位论文系统 909 条公开记录（1984-2025，院系公开库全量）`;
+document.getElementById('trees-h').textContent = DATA.length + ' 棵谱系树（按规模排序）';
 
 let cur = DATA.slice().sort((a,b)=>b.size-a.size)[0];
 let collapsed = new Set();
@@ -92,6 +93,9 @@ function render(){
   const vp = document.getElementById('viewport');
   vp.innerHTML='';
   const X = d => 40 + d*190, Y = y => 30 + y*34;
+  const byDepth={};
+  pos.forEach(o=>{ (byDepth[o.depth]=byDepth[o.depth]||[]).push(o); });
+  // links
   const link=document.createElementNS('http://www.w3.org/2000/svg','g');
   (function drawLinks(n,d){
     (n.children||[]).filter(c=>!collapsed.has(c.name+'|'+(d+1))).forEach(c=>{
@@ -103,6 +107,7 @@ function render(){
     });
   })(cur.tree,0);
   vp.appendChild(link);
+  // nodes
   const g=document.createElementNS('http://www.w3.org/2000/svg','g');
   pos.forEach(o=>{
     const grp=document.createElementNS('http://www.w3.org/2000/svg','g');
@@ -147,6 +152,7 @@ function showPanel(n){
     ${n.tag?`<div class="kv"><span class="k">身份：</span>${n.tag}</div>`:''}
     ${n.aff?`<div class="kv"><span class="k">单位/职务：</span>${n.aff}</div>`:''}
     ${n.honor?`<div class="kv"><span class="k">荣誉/备注：</span>${n.honor}</div>`:''}
+    ${n.stu?`<div class="kv"><span class="k">论文：</span>${n.stu}</div>`:''}
     ${n.src?`<div class="kv"><span class="k">来源：</span>${n.src}</div>`:''}
     ${!n.tag?'<div class="kv" style="color:#aaa">该节点暂无公开资料补全（约九成毕业生节点未逐人核实）</div>':''}`;
 }
@@ -156,6 +162,7 @@ function apply(){
     `translate(${transform.x},${transform.y}) scale(${transform.k})`);
 }
 
+// zoom/pan
 const svg=document.getElementById('svg');
 let drag=null;
 svg.addEventListener('wheel',e=>{ e.preventDefault();
@@ -164,6 +171,7 @@ svg.addEventListener('mousedown',e=>{ drag={x:e.clientX,y:e.clientY}; svg.style.
 window.addEventListener('mousemove',e=>{ if(drag){ transform.x+=e.clientX-drag.x; transform.y+=e.clientY-drag.y; drag={x:e.clientX,y:e.clientY}; apply(); }});
 window.addEventListener('mouseup',()=>{ drag=null; svg.style.cursor='grab'; });
 
+// sidebar
 const tl=document.getElementById('treelist');
 DATA.slice().sort((a,b)=>b.size-a.size).forEach(t=>{
   const d=document.createElement('div');
@@ -176,6 +184,7 @@ DATA.slice().sort((a,b)=>b.size-a.size).forEach(t=>{
   tl.appendChild(d);
 });
 
+// search
 document.getElementById('search').addEventListener('input',e=>{
   const q=e.target.value.trim();
   document.querySelectorAll('.node').forEach(el=>{
@@ -184,9 +193,12 @@ document.getElementById('search').addEventListener('input',e=>{
   if(q){
     const hit=FLAT.find(o=>o.n.name.includes(q));
     if(hit){ collapsed=new Set();
+      // expand path implicitly by clearing collapse; highlight tree switch
       if(hit.t!==cur){ cur=hit.t; render();
         document.querySelectorAll('.titem').forEach((x,i)=>x.classList.toggle('active', DATA.slice().sort((a,b)=>b.size-a.size)[i]===cur)); }
       render();
+      const el=document.querySelector(`.node[data-name="${hit.n.name}"]`);
+      if(el){ el.classList.remove('dim'); }
     }
   }
 });
