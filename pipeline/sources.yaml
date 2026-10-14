@@ -1,0 +1,56 @@
+# 数据源注册表：新增一个源 = 写一个 adapters/<name>.py + 在这里加一段。
+# runner.py 会自动发现所有 enabled: 1 的源并按 schedule 调度。
+#
+# access_type 说明：
+#   public       — 公网可达，可放云端自动跑
+#   campus       — 限校园网 IP，需要校内采集节点或手工导出后导入
+#   subscription — 需机构订阅（CNKI/万方/CALIS），手工导出 CSV 后走 importer
+
+sources:
+  - name: thu_etds
+    adapter: thu_etds
+    access_type: public
+    url: https://newetds.lib.tsinghua.edu.cn
+    rate_limit_s: 1.5        # 礼貌限速：请求间随机延时基数，勿调低（防反爬）
+    schedule: manual         # 手动触发（当前项目纪律：不自动定时）
+    enabled: 1
+    config:
+      department: 工物系       # 清华系统按院系抓；扩到其他院系改这里
+      degree: 博士
+      cursor_start: "2011-01-01"   # 已入库数据的答辩日期起点
+
+  - name: wikidata
+    adapter: wikidata
+    access_type: public
+    url: https://qlever.dev/api/wikidata   # 公共 SPARQL 镜像；query.wikidata.org 国内不稳定
+    rate_limit_s: 0.2
+    schedule: manual
+    enabled: 1
+    config:
+      # 只拉"在中国高校学习过且有博士导师"的人；institution_qid 可扩充
+      institution_qids:
+        - wd:Q16955    # 清华大学
+        - wd:Q17241    # 北京大学
+        - wd:Q15702    # 中国科学技术大学
+      page_size: 5000
+
+  # —— 以下模板：写好适配器后把 enabled 改为 1 ——
+  - name: calis_oai
+    adapter: oai_pmh
+    access_type: public
+    url: ""                  # 各校 DSpace/机构库 OAI 端点，如 https://ir.xxx.edu.cn/oai/request
+    rate_limit_s: 1.0
+    schedule: manual
+    enabled: 0
+    config:
+      metadata_prefix: oai_dc
+
+  - name: cnki_import
+    adapter: csv_importer    # 手工导出 CNKI 检索结果 Excel/CSV 后导入
+    access_type: subscription
+    url: ""
+    rate_limit_s: 0
+    schedule: manual
+    enabled: 0
+    config:
+      expected_columns: [作者, 学位授予单位, 学位年度, 导师, 篇名]
