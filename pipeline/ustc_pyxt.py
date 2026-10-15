@@ -42,10 +42,25 @@ def split_advisors(s):
 def esc(s):
     return "'" + str(s).replace("'", "''") + "'"
 
+def check_db(db):
+    """预检：明确报出 401 的根因，避免裸堆栈"""
+    import urllib.error
+    try:
+        db.query("SELECT 1")
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            sys.exit(
+                "401 Unauthorized —— 数据库 token 认证失败。\n"
+                "排查：仓库 Settings → Secrets and variables → Actions 里应有两个 secret：\n"
+                "  TURSO_DATABASE_URL = libsql://academic-family-tree-zhott6oco.aws-ap-northeast-1.turso.io\n"
+                "  TURSO_RW_TOKEN     = 数据库 RW token（注意名字必须是 TURSO_RW_TOKEN，且前后不能带空格/引号）")
+        raise
+
 def main():
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from turso_client import TursoClient
     db = TursoClient()
+    check_db(db)
 
     html = fetch(URL)
     rows = parse_rows(html)
