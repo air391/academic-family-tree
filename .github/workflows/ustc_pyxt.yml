@@ -1,0 +1,22 @@
+name: USTC 答辩公示抓取
+
+on:
+  schedule:
+    - cron: '23 1 * * 1'   # 每周一 01:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  harvest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: 抓取并入库（单次GET，幂等）
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_RW_TOKEN }}
+          USTC_FULL: '0'
+        run: python3 pipeline/ustc_pyxt.py
