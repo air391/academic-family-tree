@@ -4,7 +4,7 @@
 
 **线上前端**：GitHub Pages（`docs/` 目录）
 **云端数据库**：Turso（libSQL/SQLite），schema 见 `schema.sql`
-**当前数据**：990 人 / 908 边（清华大学工程物理系 2011 年后公开博士论文，66 人含院士/将军/教授身份富化；按已核实师承链合并为 82 棵树）
+**当前数据**：1477 人 / 1250 边（清华大学工程物理系 2011 年后公开博士论文 + WikiData 师承链；233 棵谱系树，含院士/将军/教授身份富化；affiliations 表已按现有边回填清华部分）
 
 ## 仓库结构
 
@@ -40,6 +40,11 @@
 ## 路线图
 
 - [ ] entity_resolver：WikiData `WD:Qxx` 与中文论文库人名合并（两树连成一片的关键）
+- [x] affiliations 多值经历表（学习/任教/博士后/工作，已建表并按现有边回填清华部分）
+- [ ] 教师名录适配器：先抓清华工物系教师名录，按学术简历清洗后写入 affiliations（任教+detail 职称/院系）
+- [ ] 高校核工程/物理系论文系统适配器（第二个中文学位论文源，走 workflow 抓取）
+- [ ] edges.year / theses 回填：重跑 thu_etds 时记录答辩年份与论文条目，affiliations.end_year 自动可填
+- [ ] Wikidata 节点院校补全：从 employer / educated-at 属性批量写入 affiliations
 - [ ] oai_pmh 通用适配器（覆盖 DSpace/CALIS 成员馆）
 - [ ] csv_importer（CNKI/万方手工导出导入）
 - [ ] 校园网采集节点（解决 IP 白名单源）
