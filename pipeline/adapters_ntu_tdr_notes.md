@@ -58,3 +58,26 @@
 - mentorship_edges: advisor_id=advisor（新人则先建 person，title=''，note='advisor@ntu_physics'），student_id=author，year=dc.date.issued，source='ntu_tdr'
 - theses: person=student，title，year，degree（博士/硕士），url=handle 链接
 - 与清华 etd 边去重：UNIQUE(advisor,student) 冲突时保留先到的 source，source 追加 ';ntu_tdr'
+
+---
+
+# 补充调研：国内高校可达性对比（2026-10-15 实测）
+
+## 中科大 —— 推荐，答辩公示页可直接抓
+
+- `https://pyxt.ustc.edu.cn/?menu=public_replay` 是**静态 HTML**（2.2MB 单页整表），无登录、无验证码、无 JS 渲染
+- 当前窗口"答辩时间为 2026-05-15 至 2026-11-15"共 **5412 条**，列：论文题目/学科专业/答辩人/学位层次/答辩时间/答辩地点/院系/**导师**（含双导师"陈旸 赵东锋"写法）
+- 核相关 141 条：核科学技术学院、国家同步辐射实验室、合肥物质院核方向等——与我们核谱系高度对口
+- **限制**：滚动窗口、无历史归档（页面内无翻页/历史链接），必须靠 GitHub Actions 定时积累；每半年全量约 5-6 千条，每次运行 1 次 GET 即可
+- 师资路线：核学院教师列表在 tsites 系统（`hqyulab.ustc.edu.cn/unit_teacherlist.jsp`，清华同方主页系统），JS 渲染，静态抓不到
+
+## 北京大学 —— 不推荐 workflow 抓，适合人工补点
+
+- `phy.pku.edu.cn/jsfcjy.jsp`（教研人员）为 Vue/aop_component JS 渲染，静态抓取拿不到名单
+- 无公开学位论文批量库（仅馆内 OPAC，无导师字段批量接口）
+- 价值在于 elder 节点定向补充（1955 与清华工物系同源那代），适合人工录入而非爬虫
+
+## 结论
+
+第二个 workflow 数据源建议：**中科大答辩公示**（比台大 TDR 更贴合核谱系，且一次 GET 全量）。
+台大 TDR 继续做物理谱系支线；北大走人工关键点。
