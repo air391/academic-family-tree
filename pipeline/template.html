@@ -12,28 +12,36 @@ body{font-family:"Noto Sans CJK SC","PingFang SC","Microsoft YaHei",sans-serif;b
 header{padding:10px 18px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:center;flex-wrap:wrap}
 header h1{font-size:17px;color:var(--acc)}
 header .stats{font-size:12.5px;color:var(--mut)}
-#search{padding:6px 10px;border:1px solid var(--line);border-radius:6px;width:200px;font-size:13px}
+#search{padding:6px 10px;border:1px solid var(--line);border-radius:6px;width:220px;font-size:13px}
+button.act{padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:#fff;font-size:12.5px;cursor:pointer;color:var(--acc)}
+button.act:hover{background:#f6e8e5}
 #legend{display:flex;gap:10px;font-size:12px;color:var(--mut);align-items:center}
 #legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:3px;vertical-align:-1px}
 main{flex:1;display:flex;min-height:0}
 #sidebar{width:300px;background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:10px}
-#sidebar h2{font-size:13px;color:var(--mut);margin:4px 2px 8px;position:sticky;top:0;background:var(--panel)}
+#sidebar h2{font-size:13px;color:var(--mut);margin:4px 2px 8px;position:sticky;top:0;background:var(--panel);z-index:1}
 .titem{padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;line-height:1.5}
 .titem:hover{background:#f0ece4}
 .titem.active{background:#f6e8e5;outline:1px solid var(--acc)}
 .titem b{color:var(--acc)}
 .titem .meta{color:var(--mut);font-size:11.5px}
-#canvaswrap{flex:1;position:relative;overflow:hidden}
+#canvaswrap{flex:1;position:relative;overflow:hidden;background:
+ radial-gradient(circle,#e8e4db 1px,transparent 1px);background-size:22px 22px}
 svg{width:100%;height:100%;cursor:grab}
-.node circle{stroke:#fff;stroke-width:1.5px;cursor:pointer}
-.node text{font-size:11.5px;fill:var(--ink);pointer-events:none}
-.node .tag{font-size:9.5px;fill:#fff;font-weight:bold}
-.node.dim{opacity:.15}
+.node{cursor:pointer}
+.node circle.body{stroke:#fff;stroke-width:1.5px}
+.node text{pointer-events:none}
+.node .nm{font-size:12px;fill:var(--ink)}
+.node .aff{font-size:10px;fill:var(--mut)}
+.node.dim{opacity:.13}
 .link{fill:none;stroke:#cbb;stroke-width:1.2px}
-#panel{position:absolute;top:12px;right:12px;width:290px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;box-shadow:0 4px 18px rgba(0,0,0,.08);display:none;font-size:13px;max-height:calc(100% - 24px);overflow-y:auto}
+.link.dim{opacity:.08}
+.link.hl{stroke:var(--acc);stroke-width:2px}
+#panel{position:absolute;top:12px;right:12px;width:300px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;box-shadow:0 4px 18px rgba(0,0,0,.08);display:none;font-size:13px;max-height:calc(100% - 24px);overflow-y:auto}
 #panel h3{font-size:15px;color:var(--acc);margin-bottom:6px}
 #panel .kv{margin:5px 0;line-height:1.55}
 #panel .k{color:var(--mut);font-size:11.5px}
+#panel a.pl{cursor:pointer;text-decoration:underline dotted}
 .hbadge{display:inline-block;background:linear-gradient(135deg,#b8860b,#d4a017);color:#fff;font-size:10.5px;border-radius:8px;padding:1px 7px;margin-left:5px;vertical-align:1px}
 #hint{position:absolute;bottom:10px;left:12px;font-size:11px;color:var(--mut);background:rgba(255,255,255,.85);padding:4px 8px;border-radius:6px}
 </style>
@@ -43,10 +51,11 @@ svg{width:100%;height:100%;cursor:grab}
 <h1>中文学术语承谱系 <span style="font-size:12px;color:var(--mut);font-weight:normal">Chinese Academic Genealogy · 公开数据 · 增量构建中</span></h1>
 <span class="stats" id="hstats"></span>
 <span class="stats" id="livestats"></span>
-<input id="search" placeholder="搜索学者姓名（如：康克军）…">
+<input id="search" placeholder="搜索学者姓名，回车跳转…">
+<button class="act" id="wander" title="随机打开一棵谱系树">🎲 随机逛树</button>
 <span id="legend">
-<i style="background:var(--c0)"></i>第0代(导师之导师)
-<i style="background:var(--c1)"></i>第1代(博导)
+<i style="background:var(--c0)"></i>第0代
+<i style="background:var(--c1)"></i>第1代
 <i style="background:var(--c2)"></i>第2代
 <i style="background:var(--c3)"></i>第3代
 <i style="background:var(--c4)"></i>第4代
@@ -58,112 +67,163 @@ svg{width:100%;height:100%;cursor:grab}
 <div id="canvaswrap">
 <svg id="svg" xmlns="http://www.w3.org/2000/svg"><g id="viewport"></g></svg>
 <div id="panel"></div>
-<div id="hint">滚轮缩放 · 拖拽平移 · 点击节点展开/折叠 · 金色徽章=院士或将军 · 右侧列表切换树</div>
+<div id="hint">滚轮缩放 · 拖拽平移 · 点击节点看师承 · 点人名跳转漫游 · 🎲随机逛树</div>
 </div>
 </main>
 <script>
-const DATA = %DATA%
+const NODES = %NODES%;
+const EDGES = %EDGES%;
 const GEN = ['#c0392b','#e67e22','#27ae60','#2980b9','#8e44ad'];
 const HONOR_KW = ['院士','少将','中将'];
-const FLAT = [];
-DATA.forEach(t => { (function w(n){ if(!n.virtual) FLAT.push({n, t}); (n.children||[]).forEach(w); })(t.tree); });
 const SRC_LABEL = {thu_etds:'高校学位论文库', wikidata:'WikiData', csv_import:'CSV 导入', oai_pmh:'机构库 OAI'};
+
+// ---------- 图数据结构 ----------
+const adjS = NODES.map(()=>[]);   // 学生
+const adjA = NODES.map(()=>[]);   // 导师
+EDGES.forEach(([a,s])=>{ adjS[a].push(s); adjA[s].push(a); });
+
+// 代际：无导师=0，否则 max(导师代际)+1（多父取最深，DFS+记忆化，防环）
+const gen = new Array(NODES.length).fill(-1);
+function calcGen(i, stack){
+  if(gen[i]>=0) return gen[i];
+  if(stack.has(i)) return 0;
+  stack.add(i);
+  let g = 0;
+  for(const a of adjA[i]) g = Math.max(g, calcGen(a, stack)+1);
+  stack.delete(i);
+  return gen[i] = g;
+}
+NODES.forEach((_,i)=>calcGen(i,new Set()));
+
+// 连通分量（并查集）
+const uf = NODES.map((_,i)=>i);
+const find = x => { while(uf[x]!==x){ uf[x]=uf[uf[x]]; x=uf[x]; } return x; };
+EDGES.forEach(([a,s])=>{ uf[find(a)] = find(s); });
+const comps = new Map();
+NODES.forEach((_,i)=>{ const r=find(i); if(!comps.has(r)) comps.set(r,[]); comps.get(r).push(i); });
+const compList = [...comps.values()].map(members=>{
+  const roots = members.filter(i=>!adjA[i].length);
+  const rootDisp = roots.map(i=>NODES[i].n).sort();
+  return { members, size: members.length,
+    roots: rootDisp,
+    display: rootDisp.slice(0,2).join('、') + (rootDisp.length>2?` 等${rootDisp.length}位`:''),
+    maxGen: Math.max(...members.map(i=>gen[i])) };
+}).sort((a,b)=>b.size-a.size);
+
+// 组件归属索引
+const compOf = new Array(NODES.length);
+compList.forEach((c,ci)=>c.members.forEach(i=>compOf[i]=ci));
+
+// ---------- 头部统计 ----------
 const srcc = {};
-FLAT.forEach(o=>{ const s=o.n.src||'其他'; srcc[s]=(srcc[s]||0)+1; });
+NODES.forEach(n=>{ const s=n.s||'其他'; srcc[s]=(srcc[s]||0)+1; });
 const srcTxt = Object.entries(srcc).map(([k,v])=>`${SRC_LABEL[k]||k} ${v} 人`).join(' · ');
 document.getElementById('hstats').textContent =
-  `${DATA.length} 棵树 · ${FLAT.length} 位学者 · ${srcTxt}`;
-document.getElementById('trees-h').textContent = DATA.length + ' 棵谱系树（按规模排序）';
+  `${compList.length} 棵谱系树 · ${NODES.length} 位学者 · ${EDGES.length} 条师承边 · ${srcTxt}`;
+document.getElementById('trees-h').textContent = compList.length + ' 棵谱系树（按规模排序）';
 
-let cur = DATA.slice().sort((a,b)=>b.size-a.size)[0];
-let collapsed = new Set();
+// ---------- 布局：整分量渲染（DAG，节点只出现一次） ----------
+let curComp = 0, focusNode = -1;
 let transform = {x:60,y:40,k:1};
 
-function layout(tree){
-  const pos=[]; const map=new Map(); let y=0;
-  function place(n, depth){
-    const kids=(n.children||[]).filter(c=>!collapsed.has(c.name+'|'+(depth+1)));
-    const o={n,depth,y:0};
-    pos.push(o); map.set(n,o);
-    if(!kids.length){ o.y=y++; return; }
-    kids.forEach(c=>place(c,depth+1));
-    o.y=kids.reduce((s,c)=>s+map.get(c).y,0)/kids.length;
+function layout(ci){
+  const members = new Set(compList[ci].members);
+  // 分层：每层按"先到先排"排序，同名聚合，避免交叉
+  const layers = [];
+  const inLayer = new Map();
+  compList[ci].members.forEach(i=>{
+    const g = gen[i];
+    while(layers.length<=g) layers.push([]);
+    inLayer.set(i, layers[g].length);
+    layers[g].push(i);
+  });
+  // 简单重心对齐：按导师平均位置排序两代（导师在自己层已排好）
+  for(let pass=0; pass<2; pass++){
+    for(let g=1; g<layers.length; g++){
+      const key = i => {
+        const ads = adjA[i].filter(a=>members.has(a));
+        if(!ads.length) return inLayer.get(i);
+        return ads.reduce((s,a)=>s+inLayer.get(a),0)/ads.length;
+      };
+      layers[g].sort((x,y)=>key(x)-key(y));
+      layers[g].forEach((i,k)=>inLayer.set(i,k));
+    }
   }
-  place(tree,0);
+  const pos = new Map();
+  const LH = 52, X0 = 40;
+  layers.forEach((ly,g)=>{
+    const total = ly.length*LH;
+    ly.forEach((i,k)=>pos.set(i,{x:X0+g*210, y:30+k*LH + (ly.length<8?0:0), ly:k, n:ly.length, total}));
+  });
   return pos;
 }
 
 function render(){
-  const pos = layout(cur.tree);
+  const pos = layout(curComp);
   const vp = document.getElementById('viewport');
   vp.innerHTML='';
-  const X = d => 40 + d*190, Y = y => 30 + y*34;
-  const byDepth={};
-  pos.forEach(o=>{ (byDepth[o.depth]=byDepth[o.depth]||[]).push(o); });
-  // links
+  // 祖先/后代高亮集合
+  let anc=new Set(), desc=new Set();
+  if(focusNode>=0){
+    const q=[focusNode]; anc.add(focusNode);
+    while(q.length){ const u=q.pop(); for(const a of adjA[u]) if(!anc.has(a)){anc.add(a);q.push(a);} }
+    const q2=[focusNode]; desc.add(focusNode);
+    while(q2.length){ const u=q2.pop(); for(const s of adjS[u]) if(!desc.has(s)){desc.add(s);q2.push(s);} }
+  }
+  // 边
   const link=document.createElementNS('http://www.w3.org/2000/svg','g');
-  (function drawLinks(n,d){
-    (n.children||[]).filter(c=>!collapsed.has(c.name+'|'+(d+1))).forEach(c=>{
-      if(!n.virtual){
-        const p1=pos.find(o=>o.n===n), p2=pos.find(o=>o.n===c);
-        const l=document.createElementNS('http://www.w3.org/2000/svg','path');
-        l.setAttribute('class','link');
-        l.setAttribute('d',`M${X(p1.depth)+70},${Y(p1.y)} C${X(p1.depth)+130},${Y(p1.y)} ${X(p2.depth)-60},${Y(p2.y)} ${X(p2.depth)},${Y(p2.y)}`);
-        link.appendChild(l);
-      }
-      drawLinks(c,d+1);
-    });
-  })(cur.tree,0);
+  EDGES.forEach(([a,s])=>{
+    if(!pos.has(a)||!pos.has(s)) return;
+    const p1=pos.get(a), p2=pos.get(s);
+    const l=document.createElementNS('http://www.w3.org/2000/svg','path');
+    l.setAttribute('class','link'
+      + (focusNode>=0 ? (anc.has(a)&&anc.has(s)||desc.has(a)&&desc.has(s) ? ' hl':' dim') : ''));
+    l.setAttribute('d',`M${p1.x+14},${p1.y} C${p1.x+75},${p1.y} ${p2.x-75},${p2.y} ${p2.x-14},${p2.y}`);
+    link.appendChild(l);
+  });
   vp.appendChild(link);
-  // nodes
+  // 节点
   const g=document.createElementNS('http://www.w3.org/2000/svg','g');
-  pos.forEach(o=>{
-    if(o.n.virtual) return;   // 虚拟包装节点只参与布局，不画出来
+  pos.forEach((p,i)=>{
     const grp=document.createElementNS('http://www.w3.org/2000/svg','g');
-    grp.setAttribute('class','node');
-    grp.setAttribute('transform',`translate(${X(o.depth)},${Y(o.y)})`);
-    grp.dataset.name=o.n.name;
+    grp.setAttribute('class','node'+(focusNode>=0 && !anc.has(i) && !desc.has(i) ? ' dim':''));
+    grp.setAttribute('transform',`translate(${p.x},${p.y})`);
     const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
-    c.setAttribute('r',13); c.setAttribute('fill',GEN[o.depth%5]);
+    c.setAttribute('class','body'); c.setAttribute('r',13); c.setAttribute('fill',GEN[gen[i]%5]);
     grp.appendChild(c);
-    if(o.n.honor && HONOR_KW.some(k=>o.n.honor.includes(k))){
+    if(NODES[i].h && HONOR_KW.some(k=>NODES[i].h.includes(k))){
       const b=document.createElementNS('http://www.w3.org/2000/svg','circle');
       b.setAttribute('cx',10); b.setAttribute('cy',-10); b.setAttribute('r',6.5);
       b.setAttribute('fill','#d4a017'); b.setAttribute('stroke','#fff');
       grp.appendChild(b);
       const t=document.createElementNS('http://www.w3.org/2000/svg','text');
       t.setAttribute('x',10); t.setAttribute('y',-6.5); t.setAttribute('text-anchor','middle');
-      t.setAttribute('class','tag'); t.textContent='院';
+      t.setAttribute('style','font-size:9.5px;fill:#fff;font-weight:bold'); t.textContent='院';
       grp.appendChild(t);
     }
-    const t=document.createElementNS('http://www.w3.org/2000/svg','text');
-    t.setAttribute('x',19); t.setAttribute('y',4); t.textContent=o.n.name.split('@')[0];
-    grp.appendChild(t);
-    grp.addEventListener('click',ev=>{
-      ev.stopPropagation();
-      const key=o.n.name+'|'+o.depth;
-      const hasKids=(o.n.children||[]).length>0;
-      if(hasKids){ collapsed.has(key)?collapsed.delete(key):collapsed.add(key); render(); }
-      showCloud(o.n);
-    });
+    const t1=document.createElementNS('http://www.w3.org/2000/svg','text');
+    t1.setAttribute('x',19); t1.setAttribute('y',-1);
+    t1.setAttribute('class','nm'); t1.textContent=NODES[i].n.split('@')[0];
+    grp.appendChild(t1);
+    const aff = NODES[i].af || NODES[i].t || '';
+    if(aff){
+      const t2=document.createElementNS('http://www.w3.org/2000/svg','text');
+      t2.setAttribute('x',19); t2.setAttribute('y',11);
+      t2.setAttribute('class','aff'); t2.textContent=aff.length>16?aff.slice(0,16)+'…':aff;
+      grp.appendChild(t2);
+    }
+    grp.addEventListener('click',ev=>{ ev.stopPropagation(); focusNode=i; showPanel(i); render(); });
     g.appendChild(grp);
   });
   vp.appendChild(g);
   apply();
-}
-
-function showPanel(n){
-  const p=document.getElementById('panel');
-  p.style.display='block';
-  p.innerHTML = `<h3>${n.name.split('@')[0]}
-    ${n.honor&&HONOR_KW.some(k=>n.honor.includes(k))?'<span class="hbadge">'+('院士'+(n.honor.includes('将')?'·将军':''))+'</span>':''}</h3>
-    <div class="kv"><span class="k">谱系角色：</span>第 ${n.gen} 代</div>
-    ${n.tag?`<div class="kv"><span class="k">身份：</span>${n.tag}</div>`:''}
-    ${n.aff?`<div class="kv"><span class="k">单位/职务：</span>${n.aff}</div>`:''}
-    ${n.honor?`<div class="kv"><span class="k">荣誉/备注：</span>${n.honor}</div>`:''}
-    ${n.stu?`<div class="kv"><span class="k">论文：</span>${n.stu}</div>`:''}
-    ${n.src?`<div class="kv"><span class="k">来源：</span>${n.src}</div>`:''}
-    ${!n.tag?'<div class="kv" style="color:#aaa">该节点暂无公开资料补全（约九成毕业生节点未逐人核实）</div>':''}`;
+  // 聚焦居中
+  if(focusNode>=0 && pos.has(focusNode)){
+    const p=pos.get(focusNode);
+    transform.x = 200 - p.x*transform.k;
+    transform.y = 180 - p.y*transform.k;
+    apply();
+  }
 }
 
 function apply(){
@@ -171,59 +231,94 @@ function apply(){
     `translate(${transform.x},${transform.y}) scale(${transform.k})`);
 }
 
-// zoom/pan
-const svg=document.getElementById('svg');
-let drag=null;
-svg.addEventListener('wheel',e=>{ e.preventDefault();
-  const f=e.deltaY<0?1.12:0.89; transform.k=Math.min(3,Math.max(.25,transform.k*f)); apply(); },{passive:false});
-svg.addEventListener('mousedown',e=>{ drag={x:e.clientX,y:e.clientY}; svg.style.cursor='grabbing'; });
-window.addEventListener('mousemove',e=>{ if(drag){ transform.x+=e.clientX-drag.x; transform.y+=e.clientY-drag.y; drag={x:e.clientX,y:e.clientY}; apply(); }});
-window.addEventListener('mouseup',()=>{ drag=null; svg.style.cursor='grab'; });
-
-// sidebar
-const tl=document.getElementById('treelist');
-DATA.slice().sort((a,b)=>b.size-a.size).forEach(t=>{
-  const d=document.createElement('div');
-  d.className='titem'+(t===cur?' active':'');
-  d.innerHTML=`<b>${t.display}</b>　${t.size}人 · ${t.depth}代${t.tree.honor&&HONOR_KW.some(k=>t.tree.honor.includes(k))?' · 🏅':''}<br>
-  <span class="meta">根：${t.roots.join('、')}｜二代：${t.level2.slice(0,3).join('、')}${t.level2.length>3?'…':''}</span>`;
-  d.onclick=()=>{ cur=t; collapsed=new Set(); transform={x:60,y:40,k:1};
-    document.querySelectorAll('.titem').forEach(x=>x.classList.remove('active'));
-    d.classList.add('active'); render(); };
-  tl.appendChild(d);
-});
-
-// search
-document.getElementById('search').addEventListener('input',e=>{
-  const q=e.target.value.trim();
-  document.querySelectorAll('.node').forEach(el=>{
-    el.classList.toggle('dim', q && !el.dataset.name.includes(q));
+// ---------- 人物信息面板 ----------
+function showPanel(i){
+  const n=NODES[i], p=document.getElementById('panel');
+  p.style.display='block';
+  const ads = adjA[i].map(a=>`<a class="pl" data-i="${a}">${NODES[a].n}</a>`);
+  const stus = adjS[i].map(s=>`<a class="pl" data-i="${s}">${NODES[s].n}</a>`);
+  p.innerHTML = `<h3>${n.n.split('@')[0]}
+    ${n.h&&HONOR_KW.some(k=>n.h.includes(k))?'<span class="hbadge">'+('院士'+(n.h.includes('将')?'·将军':''))+'</span>':''}</h3>
+    <div class="kv"><span class="k">谱系角色：</span>第 ${gen[i]} 代</div>
+    ${n.t?`<div class="kv"><span class="k">身份：</span>${n.t}</div>`:''}
+    ${n.af?`<div class="kv"><span class="k">单位/职务：</span>${n.af}</div>`:''}
+    ${n.h?`<div class="kv"><span class="k">荣誉/备注：</span>${n.h}</div>`:''}
+    <div class="kv"><span class="k">导师（${ads.length}）：</span>${ads.length?ads.join('、'):'— 谱系起点'}</div>
+    <div class="kv"><span class="k">学生（${stus.length}）：</span>${stus.length?stus.slice(0,12).join('、')+(stus.length>12?'…':''):'— 暂无记录'}</div>
+    ${n.s?`<div class="kv"><span class="k">来源：</span>${SRC_LABEL[n.s]||n.s}</div>`:''}
+    <div class="kv" style="color:#bbb;font-size:11px">点击导师/学生名字可跳转到其谱系位置</div>`;
+  p.querySelectorAll('a.pl').forEach(a=>a.onclick=()=>{
+    const j=+a.dataset.i;
+    jumpTo(j);
   });
-  if(q){
-    const hit=FLAT.find(o=>o.n.name.includes(q));
-    if(hit){ collapsed=new Set();
-      // expand path implicitly by clearing collapse; highlight tree switch
-      if(hit.t!==cur){ cur=hit.t; render();
-        document.querySelectorAll('.titem').forEach((x,i)=>x.classList.toggle('active', DATA.slice().sort((a,b)=>b.size-a.size)[i]===cur)); }
-      render();
-      const el=document.querySelector(`.node[data-name="${hit.n.name}"]`);
-      if(el){ el.classList.remove('dim'); el.scrollIntoView?null:null; }
-    }
+}
+
+// 跳转：换分量（若需要）+聚焦
+function jumpTo(i){
+  const ci=compOf[i];
+  if(ci!==curComp){ curComp=ci; focusNode=i; syncSidebar(); }
+  focusNode=i; render(); showPanel(i);
+}
+
+// ---------- 侧栏 ----------
+const tl=document.getElementById('treelist');
+function syncSidebar(){
+  tl.innerHTML='';
+  compList.forEach((c,ci)=>{
+    const d=document.createElement('div');
+    d.className='titem'+(ci===curComp?' active':'');
+    d.innerHTML=`<b>${c.display}</b>　${c.size}人 · ${c.maxGen+1}代<br>
+    <span class="meta">根：${c.roots.slice(0,3).join('、')}${c.roots.length>3?'…':''}</span>`;
+    d.onclick=()=>{ curComp=ci; focusNode=-1; document.getElementById('panel').style.display='none'; syncSidebar(); render(); };
+    tl.appendChild(d);
+  });
+}
+syncSidebar();
+
+// ---------- 搜索：即时跳转（输入即找，回车同效） ----------
+let searchTimer=null;
+document.getElementById('search').addEventListener('input',e=>{
+  clearTimeout(searchTimer);
+  searchTimer=setTimeout(()=>{
+    const q=e.target.value.trim();
+    if(!q) return;
+    const hit = NODES.findIndex(n=>n.n.includes(q));
+    if(hit>=0) jumpTo(hit);
+  },350);
+});
+document.getElementById('search').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    clearTimeout(searchTimer);
+    const q=e.target.value.trim();
+    const hit = NODES.findIndex(n=>n.n.includes(q));
+    if(hit>=0) jumpTo(hit);
   }
 });
 
-// ===== 云端实时查询（只读 token；留空则仅用本地快照）=====
-// 生成只读 token（90 天有效，可随时在 Turso 控制台吊销）：
-//   turso db tokens create academic-family-tree --read-only --expiration 90d
-// 吊销（会同时吊销库内所有 token，需重新配置 workflow 密钥）：
-//   turso db tokens invalidate academic-family-tree
+// ---------- 随机逛树 ----------
+document.getElementById('wander').onclick=()=>{
+  const ci = Math.floor(Math.random()*compList.length);
+  const c = compList[ci];
+  const i = c.members[Math.floor(Math.random()*c.members.length)];
+  jumpTo(i);
+};
+
+// ---------- 缩放/平移 ----------
+const svg=document.getElementById('svg');
+let drag=null;
+svg.addEventListener('wheel',e=>{ e.preventDefault();
+  const f=e.deltaY<0?1.12:0.89; transform.k=Math.min(3,Math.max(.2,transform.k*f)); apply(); },{passive:false});
+svg.addEventListener('mousedown',e=>{ drag={x:e.clientX,y:e.clientY}; svg.style.cursor='grabbing'; });
+window.addEventListener('mousemove',e=>{ if(drag){ transform.x+=e.clientX-drag.x; transform.y+=e.clientY-drag.y; drag={x:e.clientX,y:e.clientY}; apply(); }});
+window.addEventListener('mouseup',()=>{ drag=null; svg.style.cursor='grab'; });
+svg.addEventListener('click',()=>{ focusNode=-1; render(); document.getElementById('panel').style.display='none'; });
+
+// ---------- 云端实时查询（只读 token；留空则仅用本地快照）=====
 const RO_TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicm8iLCJleHAiOjE3OTQ1ODAxODcsImlhdCI6MTc5MTk4ODE4NywiaWQiOiIwMWExM2E3Yi00NDAxLTdkNzItYWQyMS1mZjFkMjY5ZWExMjkiLCJraWQiOiJaSEtWbGNzcmQzeE50UDJ1WGc1UDVXSUdxRzk3Vm5wVGE5TnJNNGF6S2RzIiwicmlkIjoiOWNiNTYxNWItN2VlZC00ZDcyLThkM2EtYzcyNmJhNzI2YTlhIn0.TrqyIIJv6xgYRP3822DxwGDsVcO2RuswxPfXsTyTu1NoD4LI73wTDxK2--VUHkPuKJEEZz0HlH2XGmo3GE0rCg"; // 只读，2026-11-13 到期
 const DB_HTTP = "https://academic-family-tree-zhott6oco.aws-ap-northeast-1.turso.io";
 const liveEl = document.getElementById('livestats');
 if(RO_TOKEN){ liveEl.textContent='· 云端实时查询：已连接（只读）'; liveEl.style.color='#27ae60'; }
 else { liveEl.textContent='· 云端实时查询：未配置，仅显示最近快照'; }
-
-function escq(s){ return s.replace(/'/g,"''"); }
 
 async function tursoQuery(sql){
   const r = await fetch(DB_HTTP+"/v2/pipeline",{method:"POST",
@@ -236,55 +331,38 @@ async function tursoQuery(sql){
   return (res.result.rows||[]).map(row=>row.map(c=>c.value));
 }
 
-async function cloudNeighbors(pid, dir){
-  const sql = dir==='up'
-    ? `SELECT a.id, COALESCE(NULLIF(a.alias,''),a.name) FROM mentorship_edges e JOIN persons a ON a.id=e.advisor_id WHERE e.student_id='${escq(pid)}'`
-    : `SELECT s.id, COALESCE(NULLIF(s.alias,''),s.name) FROM mentorship_edges e JOIN persons s ON s.id=e.student_id WHERE e.advisor_id='${escq(pid)}'`;
-  return tursoQuery(sql);
-}
-
-// 从云端实时构建某人的师承链（上溯）与门下（下钻），客户端逐层展开
-async function cloudLineage(name){
-  const rows = await tursoQuery(
-    `SELECT id, name, COALESCE(NULLIF(alias,''),name), COALESCE(NULLIF(title,''),''), COALESCE(NULLIF(affiliation,''),'')
-     FROM persons WHERE name LIKE '%${escq(name)}%' OR alias LIKE '%${escq(name)}%' LIMIT 8`);
-  if(!rows.length) return `<div class="kv" style="color:#aaa">云端数据库未找到“${name}”（可能尚未收录该数据源）</div>`;
-  const out = [];
-  for(const [pid, nm, disp, title, aff] of rows.slice(0,3)){
-    const chain = [disp + (aff?`（${aff}）`:'')];
-    let cur = pid, seen = new Set([pid]);
-    for(let d=0; d<10; d++){
-      const ups = await cloudNeighbors(cur, 'up');
-      if(!ups.length) break;
-      cur = ups[0][0];
-      if(seen.has(cur)) break;
-      seen.add(cur);
-      chain.push(ups[0][1]);
+// 面板上追加云端学术简历（毕业院校/任教经历，来自 affiliations 表）
+async function enrichCloud(i){
+  if(!RO_TOKEN) return;
+  const n=NODES[i];
+  try{
+    const rows = await tursoQuery(
+      `SELECT i.name, a.role, a.detail FROM affiliations a JOIN institutions i ON i.id=a.institution_id
+       WHERE a.person_id='${n.id.replace(/'/g,"''")}'`);
+    if(rows.length){
+      const p=document.getElementById('panel');
+      const div=document.createElement('div');
+      div.className='kv';
+      div.innerHTML=`<span class="k">学术简历（云端实时）：</span>`+
+        rows.map(r=>`${r[0]}（${r[1]}${r[2]?'·'+r[2]:''}）`).join('；');
+      p.appendChild(div);
     }
-    const stus = await cloudNeighbors(pid, 'down');
-    out.push(`<div class="kv"><span class="k">师承链：</span>${chain.join(' ← ')}</div>`);
-    out.push(stus.length
-      ? `<div class="kv"><span class="k">门下（${stus.length}）：</span>${stus.map(s=>s[1]).join('、')}</div>`
-      : `<div class="kv" style="color:#aaa">暂无学生记录</div>`);
-  }
-  return out.join('');
+  }catch(e){/* 静默降级 */}
 }
+const _showPanel = showPanel;
+showPanel = function(i){ _showPanel(i); enrichCloud(i); };
 
-async function showCloud(n){
-  const p = document.getElementById('panel');
-  if(!RO_TOKEN){ showPanel(n); return; }
-  p.style.display='block';
-  p.innerHTML = `<h3>${n.name.split('@')[0]} <span class="hbadge" style="background:#2980b9">云端实时</span></h3><div class="kv" style="color:#888">正在查询云端数据库…</div>`;
-  try {
-    const html = await cloudLineage(n.name.split('@')[0]);
-    p.innerHTML = `<h3>${n.name.split('@')[0]} <span class="hbadge" style="background:#2980b9">云端实时</span></h3>` + html
-      + `<div class="kv" style="color:#bbb;font-size:11px">数据直接来自云端数据库只读查询，可能比左侧快照更新</div>`;
-  } catch(e){
-    showPanel(n);
+// 深链接：#p=姓名 直接定位（可分享"某人的谱系页"链接）
+function applyHash(){
+  const m = location.hash.match(/p=([^&]+)/);
+  if(m){
+    const i = NODES.findIndex(n=>n.n.includes(decodeURIComponent(m[1])));
+    if(i>=0){ jumpTo(i); return; }
   }
+  render();
 }
-
-render();
+window.addEventListener('hashchange', applyHash);
+applyHash();
 </script>
 </body>
 </html>
