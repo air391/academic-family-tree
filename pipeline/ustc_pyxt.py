@@ -42,6 +42,25 @@ def split_advisors(s):
 def esc(s):
     return "'" + str(s).replace("'", "''") + "'"
 
+class NameSpace:
+    """同名消歧：仅当名字已被【其他来源】占用时，ustc 侧才改用 name@ustc，
+    避免不同谱系被同名节点错误合并；ustc 自己已占用的名字保持沿用。"""
+    def __init__(self, db):
+        self.info = {r[0]: r[1] for r in db.query("SELECT id, source FROM persons")}
+        self.map = {}
+    def pid(self, name):
+        if name in self.map:
+            return self.map[name]
+        if name not in self.info or self.info[name] == 'ustc_pyxt':
+            pid = name                      # 新名字 或 ustc 已占用
+        else:
+            pid = name + '@ustc'            # 被别源占用 → 消歧
+            n = 2
+            while pid in self.info and self.info.get(pid) != 'ustc_pyxt':
+                pid = f'{name}@ustc{n}'; n += 1
+        self.map[name] = pid
+        return pid
+
 def check_db(db):
     """预检：明确报出 401 的根因，避免裸堆栈"""
     import urllib.error
@@ -61,6 +80,7 @@ def main():
     from turso_client import TursoClient
     db = TursoClient()
     check_db(db)
+    ns = NameSpace(db)
 
     html = fetch(URL)
     rows = parse_rows(html)
@@ -93,25 +113,29 @@ def main():
         level = '博士' if '博士' in r['level'] else ('硕士' if '硕士' in r['level'] else r['level'])
         rel = ('博士' in level) and '博士导师' or '硕士导师'
         year = r['defense_at'][:4] if len(r['defense_at']) >= 4 else None
-        # person（幂等）
-        buf.append(f"INSERT OR IGNORE INTO persons (id, name, title, source) VALUES ({esc(st)}, {esc(st)}, '', 'ustc_pyxt')")
+        # person（幂等 + 同名消歧）
+        st_pid = ns.pid(st)
+        buf.append("INSERT OR IGNORE INTO persons (id, name, title, source) "
+                   f"VALUES ({esc(st_pid)}, {esc(st)}, '', 'ustc_pyxt')")
         n_p += 1
         # 院系 affiliation
         dname = '中国科学技术大学' + r['dept']
         if dname in inst_id:
             buf.append("INSERT OR IGNORE INTO affiliations (person_id, institution_id, role, detail, start_year, end_year, source) "
-                       f"VALUES ({esc(st)}, {inst_id[dname]}, '学习', {esc(r['major'])}, {year or 'NULL'}, NULL, 'ustc_pyxt')")
+                       f"VALUES ({esc(st_pid)}, {inst_id[dname]}, '学习', {esc(r['major'])}, {year or 'NULL'}, NULL, 'ustc_pyxt')")
             n_a += 1
         # thesis
         tid = f"ustc_pyxt:{r['no']}:{r['defense_at'][:10]}"
         buf.append("INSERT OR IGNORE INTO theses (id, author_id, title, defense_date, source_id) VALUES "
-                   f"({esc(tid)}, {esc(st)}, {esc(r['title'])}, {esc(r['defense_at'])}, {src_id})")
+                   f"({esc(tid)}, {esc(st_pid)}, {esc(r['title'])}, {esc(r['defense_at'])}, {src_id})")
         n_t += 1
         # edges（双导师拆分）
         for adv in split_advisors(r['advisor']):
-            buf.append(f"INSERT OR IGNORE INTO persons (id, name, title, source) VALUES ({esc(adv)}, {esc(adv)}, '', 'ustc_pyxt')")
+            adv_pid = ns.pid(adv)
+            buf.append("INSERT OR IGNORE INTO persons (id, name, title, source) "
+                       f"VALUES ({esc(adv_pid)}, {esc(adv)}, '', 'ustc_pyxt')")
             buf.append(f"INSERT OR IGNORE INTO mentorship_edges (advisor_id, student_id, rel_type, year, source) "
-                       f"VALUES ({esc(adv)}, {esc(st)}, {esc(rel)}, {year or 'NULL'}, 'ustc_pyxt')")
+                       f"VALUES ({esc(adv_pid)}, {esc(st_pid)}, {esc(rel)}, {year or 'NULL'}, 'ustc_pyxt')")
             n_e += 1
         if len(buf) >= BATCH:
             db.exec(buf); buf = []
