@@ -12,7 +12,13 @@ body{font-family:"Noto Sans CJK SC","PingFang SC","Microsoft YaHei",sans-serif;b
 header{padding:10px 18px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:center;flex-wrap:wrap}
 header h1{font-size:17px;color:var(--acc)}
 header .stats{font-size:12.5px;color:var(--mut)}
-#search{padding:6px 10px;border:1px solid var(--line);border-radius:6px;width:220px;font-size:13px}
+#searchwrap{position:relative}
+#search{padding:6px 10px;border:1px solid var(--line);border-radius:6px;width:240px;font-size:13px}
+#suggest{position:absolute;top:34px;left:0;width:280px;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.12);display:none;z-index:20;max-height:320px;overflow-y:auto}
+.sug{padding:7px 12px;font-size:13px;cursor:pointer;line-height:1.5}
+.sug:hover,.sug.on{background:#f6e8e5}
+.sug .meta{color:var(--mut);font-size:11px}
+.sug .tag{display:inline-block;background:#eee;border-radius:4px;padding:0 5px;font-size:10.5px;color:#666;margin-left:4px}
 button.act{padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:#fff;font-size:12.5px;cursor:pointer;color:var(--acc)}
 button.act:hover{background:#f6e8e5}
 #legend{display:flex;gap:10px;font-size:12px;color:var(--mut);align-items:center}
@@ -30,6 +36,7 @@ main{flex:1;display:flex;min-height:0}
 svg{width:100%;height:100%;cursor:grab}
 .node{cursor:pointer}
 .node circle.body{stroke:#fff;stroke-width:1.5px}
+.node.focus circle.body{stroke:var(--acc);stroke-width:3px}
 .node text{pointer-events:none}
 .node .nm{font-size:12px;fill:var(--ink)}
 .node .aff{font-size:10px;fill:var(--mut)}
@@ -37,12 +44,14 @@ svg{width:100%;height:100%;cursor:grab}
 .link{fill:none;stroke:#cbb;stroke-width:1.2px}
 .link.dim{opacity:.08}
 .link.hl{stroke:var(--acc);stroke-width:2px}
+.glab{font-size:10.5px;fill:#999}
+#blank{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--mut);pointer-events:none}
+#blank .big{font-size:20px;color:#b5ad9f}
 #panel{position:absolute;top:12px;right:12px;width:300px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;box-shadow:0 4px 18px rgba(0,0,0,.08);display:none;font-size:13px;max-height:calc(100% - 24px);overflow-y:auto}
 #panel h3{font-size:15px;color:var(--acc);margin-bottom:6px}
 #panel .kv{margin:5px 0;line-height:1.55}
 #panel .k{color:var(--mut);font-size:11.5px}
 #panel a.pl{cursor:pointer;text-decoration:underline dotted}
-.hbadge{display:inline-block;background:linear-gradient(135deg,#b8860b,#d4a017);color:#fff;font-size:10.5px;border-radius:8px;padding:1px 7px;margin-left:5px;vertical-align:1px}
 #hint{position:absolute;bottom:10px;left:12px;font-size:11px;color:var(--mut);background:rgba(255,255,255,.85);padding:4px 8px;border-radius:6px}
 </style>
 </head>
@@ -51,31 +60,38 @@ svg{width:100%;height:100%;cursor:grab}
 <h1>中文学术语承谱系 <span style="font-size:12px;color:var(--mut);font-weight:normal">Chinese Academic Genealogy · 公开数据 · 增量构建中</span></h1>
 <span class="stats" id="hstats"></span>
 <span class="stats" id="livestats"></span>
-<input id="search" placeholder="搜索学者姓名，回车跳转…">
-<button class="act" id="wander" title="随机打开一棵谱系树">🎲 随机逛树</button>
+<span id="searchwrap">
+<input id="search" placeholder="搜索学者姓名，从其师承向上/向下浏览…" autocomplete="off">
+<div id="suggest"></div>
+</span>
+<button class="act" id="wander" title="随机选一位学者，从TA开始浏览">🎲 随机学者</button>
 <span id="legend">
 <i style="background:var(--c0)"></i>第0代
 <i style="background:var(--c1)"></i>第1代
 <i style="background:var(--c2)"></i>第2代
 <i style="background:var(--c3)"></i>第3代
 <i style="background:var(--c4)"></i>第4代
-｜ <span title="金色徽章=两院院士/将军">🏅=院士/将军</span>
 </span>
 </header>
 <main>
 <div id="sidebar"><h2 id="trees-h"></h2><div id="treelist"></div></div>
 <div id="canvaswrap">
 <svg id="svg" xmlns="http://www.w3.org/2000/svg"><g id="viewport"></g></svg>
+<div id="blank">
+  <div class="big">🔍 搜索任意学者姓名</div>
+  <div>从 TA 开始：上方是师承（导师、导师的导师），下方是学派（学生、学生的学生）</div>
+  <div>点击任意节点可切换到以 TA 为中心 · 右侧栏可按谱系树浏览</div>
+</div>
 <div id="panel"></div>
-<div id="hint">滚轮缩放 · 拖拽平移 · 点击节点看师承 · 点人名跳转漫游 · 🎲随机逛树</div>
+<div id="hint">滚轮缩放 · 拖拽平移 · 点击节点以其为中心重建视图</div>
 </div>
 </main>
 <script>
 const NODES = %NODES%;
 const EDGES = %EDGES%;
 const GEN = ['#c0392b','#e67e22','#27ae60','#2980b9','#8e44ad'];
-const HONOR_KW = ['院士','少将','中将'];
-const SRC_LABEL = {thu_etds:'高校学位论文库', wikidata:'WikiData', csv_import:'CSV 导入', oai_pmh:'机构库 OAI'};
+const SRC_LABEL = {thu_etds:'高校学位论文库', wikidata:'WikiData', ustc_pyxt:'中科大答辩公示',
+                   thu_ep_faculty:'清华工物系名录', csv_import:'CSV 导入', oai_pmh:'机构库 OAI'};
 
 // ---------- 图数据结构 ----------
 const adjS = NODES.map(()=>[]);   // 学生
@@ -109,8 +125,6 @@ const compList = [...comps.values()].map(members=>{
     display: rootDisp.slice(0,2).join('、') + (rootDisp.length>2?` 等${rootDisp.length}位`:''),
     maxGen: Math.max(...members.map(i=>gen[i])) };
 }).sort((a,b)=>b.size-a.size);
-
-// 组件归属索引
 const compOf = new Array(NODES.length);
 compList.forEach((c,ci)=>c.members.forEach(i=>compOf[i]=ci));
 
@@ -122,63 +136,90 @@ document.getElementById('hstats').textContent =
   `${compList.length} 棵谱系树 · ${NODES.length} 位学者 · ${EDGES.length} 条师承边 · ${srcTxt}`;
 document.getElementById('trees-h').textContent = compList.length + ' 棵谱系树（按规模排序）';
 
-// ---------- 布局：整分量渲染（DAG，节点只出现一次） ----------
-let curComp = 0, focusNode = -1;
+// ---------- 以人为中心的视图（academictree 式：向上师承 + 向下学派） ----------
+let focusNode = -1;
 let transform = {x:60,y:40,k:1};
 
-function layout(ci){
-  const members = new Set(compList[ci].members);
-  // 分层：每层按"先到先排"排序，同名聚合，避免交叉
-  const layers = [];
-  const inLayer = new Map();
-  compList[ci].members.forEach(i=>{
-    const g = gen[i];
-    while(layers.length<=g) layers.push([]);
-    inLayer.set(i, layers[g].length);
-    layers[g].push(i);
-  });
-  // 简单重心对齐：按导师平均位置排序两代（导师在自己层已排好）
-  for(let pass=0; pass<2; pass++){
-    for(let g=1; g<layers.length; g++){
-      const key = i => {
-        const ads = adjA[i].filter(a=>members.has(a));
-        if(!ads.length) return inLayer.get(i);
-        return ads.reduce((s,a)=>s+inLayer.get(a),0)/ads.length;
-      };
-      layers[g].sort((x,y)=>key(x)-key(y));
-      layers[g].forEach((i,k)=>inLayer.set(i,k));
-    }
+function neighborhood(i){
+  const anc=new Set([i]), desc=new Set([i]);
+  let q=[i]; while(q.length){ const u=q.pop(); for(const a of adjA[u]) if(!anc.has(a)){anc.add(a);q.push(a);} }
+  q=[i]; while(q.length){ const u=q.pop(); for(const s of adjS[u]) if(!desc.has(s)){desc.add(s);q.push(s);} }
+  return {anc, desc, all:new Set([...anc,...desc])};
+}
+
+function layoutFocus(f){
+  const {all} = neighborhood(f);
+  const fgen = gen[f];
+  // 相对层
+  const layerOf = new Map();
+  all.forEach(i=>layerOf.set(i, gen[i]-fgen));
+  // 分层
+  const layers = new Map();
+  all.forEach(i=>{ const L=layerOf.get(i); if(!layers.has(L)) layers.set(L,[]); layers.get(L).push(i); });
+  // 排序：从焦点向两侧，按已放置邻侧重心
+  const order = new Map();  // i -> 层内序号
+  const place = (L, arr)=>{ order.set(L, arr); arr.forEach((i,k)=>order.set('k'+i,k)); };
+  // 下行：按导师（层 < L）重心
+  const maxL = Math.max(...layers.keys()), minL = Math.min(...layers.keys());
+  place(0, [f]);
+  for(let L=1; L<=maxL; L++){
+    if(!layers.has(L)) continue;
+    const bc = i=>{
+      const ps = adjA[i].filter(a=>all.has(a)&&layerOf.get(a)<L&&order.has('k'+a));
+      if(!ps.length) return 1e6 + i;
+      return ps.reduce((s,a)=>s+order.get('k'+a),0)/ps.length;
+    };
+    place(L, [...layers.get(L)].sort((x,y)=>bc(x)-bc(y)));
   }
+  // 上行：按学生（层 > L）重心
+  for(let L=-1; L>=minL; L--){
+    if(!layers.has(L)) continue;
+    const bc = i=>{
+      const cs = adjS[i].filter(c=>all.has(c)&&layerOf.get(c)>L&&order.has('k'+c));
+      if(!cs.length) return 1e6 + i;
+      return cs.reduce((s,c)=>s+order.get('k'+c),0)/cs.length;
+    };
+    place(L, [...layers.get(L)].sort((x,y)=>bc(x)-bc(y)));
+  }
+  // 坐标
   const pos = new Map();
-  const LH = 52, X0 = 40;
-  layers.forEach((ly,g)=>{
-    const total = ly.length*LH;
-    ly.forEach((i,k)=>pos.set(i,{x:X0+g*210, y:30+k*LH + (ly.length<8?0:0), ly:k, n:ly.length, total}));
-  });
-  return pos;
+  const LH = 52, X0 = 190, Y0 = 60;
+  for(let L=minL; L<=maxL; L++){
+    if(!layers.has(L)) continue;
+    const arr = order.get(L);
+    arr.forEach((i,k)=>pos.set(i,{x:X0+(L-minL)*230, y:Y0+k*LH, L, k}));
+  }
+  return {pos, all, minL, maxL, layers, order};
 }
 
 function render(){
-  const pos = layout(curComp);
   const vp = document.getElementById('viewport');
   vp.innerHTML='';
-  // 祖先/后代高亮集合
-  let anc=new Set(), desc=new Set();
-  if(focusNode>=0){
-    const q=[focusNode]; anc.add(focusNode);
-    while(q.length){ const u=q.pop(); for(const a of adjA[u]) if(!anc.has(a)){anc.add(a);q.push(a);} }
-    const q2=[focusNode]; desc.add(focusNode);
-    while(q2.length){ const u=q2.pop(); for(const s of adjS[u]) if(!desc.has(s)){desc.add(s);q2.push(s);} }
+  document.getElementById('blank').style.display = focusNode>=0 ? 'none' : 'flex';
+  if(focusNode<0){ apply(); return; }
+  const {pos, all, minL, maxL} = layoutFocus(focusNode);
+  // 层标签
+  const labG=document.createElementNS('http://www.w3.org/2000/svg','g');
+  for(let L=minL; L<=maxL; L++){
+    if(![...pos.values()].some(p=>p.L===L)) continue;
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('class','glab');
+    t.setAttribute('x', 190+(L-minL)*230 - 105);
+    t.setAttribute('y', 30);
+    t.setAttribute('text-anchor','start');
+    const relTxt = L<0?`师承 +${-L}`:(L>0?`学派 −${L}`:'本人');
+    t.textContent = `第${gen[focusNode]+L}代 · ${relTxt}`;
+    labG.appendChild(t);
   }
+  vp.appendChild(labG);
   // 边
   const link=document.createElementNS('http://www.w3.org/2000/svg','g');
   EDGES.forEach(([a,s])=>{
     if(!pos.has(a)||!pos.has(s)) return;
     const p1=pos.get(a), p2=pos.get(s);
     const l=document.createElementNS('http://www.w3.org/2000/svg','path');
-    l.setAttribute('class','link'
-      + (focusNode>=0 ? (anc.has(a)&&anc.has(s)||desc.has(a)&&desc.has(s) ? ' hl':' dim') : ''));
-    l.setAttribute('d',`M${p1.x+14},${p1.y} C${p1.x+75},${p1.y} ${p2.x-75},${p2.y} ${p2.x-14},${p2.y}`);
+    l.setAttribute('class','link');
+    l.setAttribute('d',`M${p1.x+14},${p1.y} C${p1.x+85},${p1.y} ${p2.x-85},${p2.y} ${p2.x-14},${p2.y}`);
     link.appendChild(l);
   });
   vp.appendChild(link);
@@ -186,44 +227,38 @@ function render(){
   const g=document.createElementNS('http://www.w3.org/2000/svg','g');
   pos.forEach((p,i)=>{
     const grp=document.createElementNS('http://www.w3.org/2000/svg','g');
-    grp.setAttribute('class','node'+(focusNode>=0 && !anc.has(i) && !desc.has(i) ? ' dim':''));
+    grp.setAttribute('class','node'+(i===focusNode?' focus':''));
     grp.setAttribute('transform',`translate(${p.x},${p.y})`);
     const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
     c.setAttribute('class','body'); c.setAttribute('r',13); c.setAttribute('fill',GEN[gen[i]%5]);
     grp.appendChild(c);
-    if(NODES[i].h && HONOR_KW.some(k=>NODES[i].h.includes(k))){
-      const b=document.createElementNS('http://www.w3.org/2000/svg','circle');
-      b.setAttribute('cx',10); b.setAttribute('cy',-10); b.setAttribute('r',6.5);
-      b.setAttribute('fill','#d4a017'); b.setAttribute('stroke','#fff');
-      grp.appendChild(b);
-      const t=document.createElementNS('http://www.w3.org/2000/svg','text');
-      t.setAttribute('x',10); t.setAttribute('y',-6.5); t.setAttribute('text-anchor','middle');
-      t.setAttribute('style','font-size:9.5px;fill:#fff;font-weight:bold'); t.textContent='院';
-      grp.appendChild(t);
-    }
     const t1=document.createElementNS('http://www.w3.org/2000/svg','text');
     t1.setAttribute('x',19); t1.setAttribute('y',-1);
-    t1.setAttribute('class','nm'); t1.textContent=NODES[i].n.split('@')[0];
+    t1.setAttribute('class','nm'); t1.textContent=NODES[i].n;
     grp.appendChild(t1);
     const aff = NODES[i].af || NODES[i].t || '';
     if(aff){
       const t2=document.createElementNS('http://www.w3.org/2000/svg','text');
       t2.setAttribute('x',19); t2.setAttribute('y',11);
-      t2.setAttribute('class','aff'); t2.textContent=aff.length>16?aff.slice(0,16)+'…':aff;
+      t2.setAttribute('class','aff'); t2.textContent=aff.length>18?aff.slice(0,18)+'…':aff;
       grp.appendChild(t2);
     }
-    grp.addEventListener('click',ev=>{ ev.stopPropagation(); focusNode=i; showPanel(i); render(); });
+    grp.addEventListener('click',ev=>{ ev.stopPropagation(); focus(i); });
     g.appendChild(grp);
   });
   vp.appendChild(g);
   apply();
-  // 聚焦居中
-  if(focusNode>=0 && pos.has(focusNode)){
-    const p=pos.get(focusNode);
-    transform.x = 200 - p.x*transform.k;
-    transform.y = 180 - p.y*transform.k;
-    apply();
-  }
+  // 聚焦本人居中（预留左侧师承标签空间）
+  const p=pos.get(focusNode);
+  transform.x = 380 - p.x*transform.k;
+  transform.y = 240 - p.y*transform.k;
+  apply();
+}
+
+function focus(i){
+  focusNode = i;
+  render();
+  showPanel(i);
 }
 
 function apply(){
@@ -237,70 +272,82 @@ function showPanel(i){
   p.style.display='block';
   const ads = adjA[i].map(a=>`<a class="pl" data-i="${a}">${NODES[a].n}</a>`);
   const stus = adjS[i].map(s=>`<a class="pl" data-i="${s}">${NODES[s].n}</a>`);
-  p.innerHTML = `<h3>${n.n.split('@')[0]}
-    ${n.h&&HONOR_KW.some(k=>n.h.includes(k))?'<span class="hbadge">'+('院士'+(n.h.includes('将')?'·将军':''))+'</span>':''}</h3>
-    <div class="kv"><span class="k">谱系角色：</span>第 ${gen[i]} 代</div>
+  p.innerHTML = `<h3>${n.n}</h3>
+    <div class="kv"><span class="k">谱系代际：</span>第 ${gen[i]} 代</div>
+    ${n.id&&n.id!==n.n?`<div class="kv"><span class="k">同名区分：</span>${n.id}</div>`:''}
     ${n.t?`<div class="kv"><span class="k">身份：</span>${n.t}</div>`:''}
     ${n.af?`<div class="kv"><span class="k">单位/职务：</span>${n.af}</div>`:''}
-    ${n.h?`<div class="kv"><span class="k">荣誉/备注：</span>${n.h}</div>`:''}
     <div class="kv"><span class="k">导师（${ads.length}）：</span>${ads.length?ads.join('、'):'— 谱系起点'}</div>
     <div class="kv"><span class="k">学生（${stus.length}）：</span>${stus.length?stus.slice(0,12).join('、')+(stus.length>12?'…':''):'— 暂无记录'}</div>
     ${n.s?`<div class="kv"><span class="k">来源：</span>${SRC_LABEL[n.s]||n.s}</div>`:''}
-    <div class="kv" style="color:#bbb;font-size:11px">点击导师/学生名字可跳转到其谱系位置</div>`;
-  p.querySelectorAll('a.pl').forEach(a=>a.onclick=()=>{
-    const j=+a.dataset.i;
-    jumpTo(j);
-  });
+    <div class="kv" style="color:#bbb;font-size:11px">点导师/学生名字 = 以 TA 为中心重建视图</div>`;
+  p.querySelectorAll('a.pl').forEach(a=>a.onclick=()=>{ focus(+a.dataset.i); });
 }
 
-// 跳转：换分量（若需要）+聚焦
-function jumpTo(i){
-  const ci=compOf[i];
-  if(ci!==curComp){ curComp=ci; focusNode=i; syncSidebar(); }
-  focusNode=i; render(); showPanel(i);
-}
-
-// ---------- 侧栏 ----------
+// ---------- 侧栏（谱系树 = 浏览入口，点击树根聚焦） ----------
 const tl=document.getElementById('treelist');
 function syncSidebar(){
   tl.innerHTML='';
   compList.forEach((c,ci)=>{
     const d=document.createElement('div');
-    d.className='titem'+(ci===curComp?' active':'');
+    d.className='titem';
     d.innerHTML=`<b>${c.display}</b>　${c.size}人 · ${c.maxGen+1}代<br>
     <span class="meta">根：${c.roots.slice(0,3).join('、')}${c.roots.length>3?'…':''}</span>`;
-    d.onclick=()=>{ curComp=ci; focusNode=-1; document.getElementById('panel').style.display='none'; syncSidebar(); render(); };
+    d.onclick=()=>{
+      // 以该树中"辈分最高的根"为起点
+      const rootIdx = c.members.filter(i=>!adjA[i].length)
+        .sort((a,b)=>gen[a]-gen[b])[0];
+      focus(rootIdx!==undefined?rootIdx:c.members[0]);
+    };
     tl.appendChild(d);
   });
 }
 syncSidebar();
 
-// ---------- 搜索：即时跳转（输入即找，回车同效） ----------
+// ---------- 搜索（下拉候选，选择即以 TA 为中心） ----------
+const sug=document.getElementById('suggest');
+function doSearch(){
+  const q=document.getElementById('search').value.trim();
+  if(!q){ sug.style.display='none'; return; }
+  const hits=[];
+  for(let i=0;i<NODES.length && hits.length<12;i++){
+    if(NODES[i].n.includes(q) || (NODES[i].id&&NODES[i].id.includes(q))) hits.push(i);
+  }
+  if(!hits.length){ sug.style.display='none'; return; }
+  sug.innerHTML='';
+  hits.forEach(i=>{
+    const n=NODES[i];
+    const d=document.createElement('div');
+    d.className='sug';
+    const tag = n.id&&n.id!==n.n ? `<span class="tag">${n.id.split('@')[1]}</span>` : '';
+    d.innerHTML=`${n.n}${tag}<br><span class="meta">${n.t||n.af||''} · 第${gen[i]}代 · ${SRC_LABEL[n.s]||n.s||''}</span>`;
+    d.onclick=()=>{ sug.style.display='none'; document.getElementById('search').value=n.n; focus(i); };
+    sug.appendChild(d);
+  });
+  sug.style.display='block';
+}
 let searchTimer=null;
-document.getElementById('search').addEventListener('input',e=>{
-  clearTimeout(searchTimer);
-  searchTimer=setTimeout(()=>{
-    const q=e.target.value.trim();
-    if(!q) return;
-    const hit = NODES.findIndex(n=>n.n.includes(q));
-    if(hit>=0) jumpTo(hit);
-  },350);
+document.getElementById('search').addEventListener('input',()=>{
+  clearTimeout(searchTimer); searchTimer=setTimeout(doSearch,250);
 });
 document.getElementById('search').addEventListener('keydown',e=>{
   if(e.key==='Enter'){
     clearTimeout(searchTimer);
     const q=e.target.value.trim();
-    const hit = NODES.findIndex(n=>n.n.includes(q));
-    if(hit>=0) jumpTo(hit);
+    const hit = NODES.findIndex(n=>n.n===q) >= 0 ? NODES.findIndex(n=>n.n===q)
+              : NODES.findIndex(n=>n.n.includes(q));
+    if(hit>=0){ sug.style.display='none'; focus(hit); }
   }
+  if(e.key==='Escape'){ sug.style.display='none'; }
+});
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#searchwrap')) sug.style.display='none';
 });
 
-// ---------- 随机逛树 ----------
+// ---------- 随机学者 ----------
 document.getElementById('wander').onclick=()=>{
-  const ci = Math.floor(Math.random()*compList.length);
-  const c = compList[ci];
-  const i = c.members[Math.floor(Math.random()*c.members.length)];
-  jumpTo(i);
+  const i = Math.floor(Math.random()*NODES.length);
+  focus(i);
 };
 
 // ---------- 缩放/平移 ----------
@@ -311,7 +358,7 @@ svg.addEventListener('wheel',e=>{ e.preventDefault();
 svg.addEventListener('mousedown',e=>{ drag={x:e.clientX,y:e.clientY}; svg.style.cursor='grabbing'; });
 window.addEventListener('mousemove',e=>{ if(drag){ transform.x+=e.clientX-drag.x; transform.y+=e.clientY-drag.y; drag={x:e.clientX,y:e.clientY}; apply(); }});
 window.addEventListener('mouseup',()=>{ drag=null; svg.style.cursor='grab'; });
-svg.addEventListener('click',()=>{ focusNode=-1; render(); document.getElementById('panel').style.display='none'; });
+svg.addEventListener('click',()=>{ document.getElementById('panel').style.display='none'; });
 
 // ---------- 云端实时查询（只读 token；留空则仅用本地快照）=====
 const RO_TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicm8iLCJleHAiOjE3OTQ1ODAxODcsImlhdCI6MTc5MTk4ODE4NywiaWQiOiIwMWExM2E3Yi00NDAxLTdkNzItYWQyMS1mZjFkMjY5ZWExMjkiLCJraWQiOiJaSEtWbGNzcmQzeE50UDJ1WGc1UDVXSUdxRzk3Vm5wVGE5TnJNNGF6S2RzIiwicmlkIjoiOWNiNTYxNWItN2VlZC00ZDcyLThkM2EtYzcyNmJhNzI2YTlhIn0.TrqyIIJv6xgYRP3822DxwGDsVcO2RuswxPfXsTyTu1NoD4LI73wTDxK2--VUHkPuKJEEZz0HlH2XGmo3GE0rCg"; // 只读，2026-11-13 到期
@@ -356,10 +403,12 @@ showPanel = function(i){ _showPanel(i); enrichCloud(i); };
 function applyHash(){
   const m = location.hash.match(/p=([^&]+)/);
   if(m){
-    const i = NODES.findIndex(n=>n.n.includes(decodeURIComponent(m[1])));
-    if(i>=0){ jumpTo(i); return; }
+    const q = decodeURIComponent(m[1]);
+    let i = NODES.findIndex(n=>n.id===q);
+    if(i<0) i = NODES.findIndex(n=>n.n===q);
+    if(i<0) i = NODES.findIndex(n=>n.n.includes(q));
+    if(i>=0){ focus(i); return; }
   }
-  render();
 }
 window.addEventListener('hashchange', applyHash);
 applyHash();
