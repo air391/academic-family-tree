@@ -172,13 +172,20 @@ function layoutFocus(f){
     };
     place(L, [...layers.get(L)].sort((x,y)=>bc(x)-bc(y)));
   }
-  // 坐标
+  // 坐标：academictree 式——整幅图高度由最宽层决定，
+  // 其余各层纵向均匀铺开占满整列（单节点层垂直居中），不再从顶部堆叠
   const pos = new Map();
   const LH = 52, X0 = 190, Y0 = 60;
+  let maxCount = 0;
+  for(let L=minL; L<=maxL; L++){ if(layers.has(L)) maxCount = Math.max(maxCount, layers.get(L).length); }
+  const H = (maxCount-1) * LH;
   for(let L=minL; L<=maxL; L++){
     if(!layers.has(L)) continue;
-    const arr = order.get(L);
-    arr.forEach((i,k)=>pos.set(i,{x:X0+(L-minL)*230, y:Y0+k*LH, L, k}));
+    const arr = order.get(L), n = arr.length;
+    arr.forEach((i,k)=>{
+      const y = n===1 ? Y0 + H/2 : Y0 + k * H/(n-1);
+      pos.set(i,{x:X0+(L-minL)*230, y, L, k});
+    });
   }
   return {pos, all, minL, maxL, layers, order};
 }
