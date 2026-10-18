@@ -24,13 +24,6 @@ button.act:hover{background:#f6e8e5}
 #legend{display:flex;gap:10px;font-size:12px;color:var(--mut);align-items:center}
 #legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:3px;vertical-align:-1px}
 main{flex:1;display:flex;min-height:0}
-#sidebar{width:300px;background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:10px}
-#sidebar h2{font-size:13px;color:var(--mut);margin:4px 2px 8px;position:sticky;top:0;background:var(--panel);z-index:1}
-.titem{padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;line-height:1.5}
-.titem:hover{background:#f0ece4}
-.titem.active{background:#f6e8e5;outline:1px solid var(--acc)}
-.titem b{color:var(--acc)}
-.titem .meta{color:var(--mut);font-size:11.5px}
 #canvaswrap{flex:1;position:relative;overflow:hidden;background:
  radial-gradient(circle,#e8e4db 1px,transparent 1px);background-size:22px 22px}
 svg{width:100%;height:100%;cursor:grab}
@@ -74,13 +67,12 @@ svg{width:100%;height:100%;cursor:grab}
 </span>
 </header>
 <main>
-<div id="sidebar"><h2 id="trees-h"></h2><div id="treelist"></div></div>
 <div id="canvaswrap">
 <svg id="svg" xmlns="http://www.w3.org/2000/svg"><g id="viewport"></g></svg>
 <div id="blank">
   <div class="big">🔍 搜索任意学者姓名</div>
   <div>从 TA 开始：上方是师承（导师、导师的导师），下方是学派（学生、学生的学生）</div>
-  <div>点击任意节点可切换到以 TA 为中心 · 右侧栏可按谱系树浏览</div>
+  <div>点击任意节点可切换到以 TA 为中心</div>
 </div>
 <div id="panel"></div>
 <div id="hint">滚轮缩放 · 拖拽平移 · 点击节点以其为中心重建视图</div>
@@ -134,7 +126,6 @@ NODES.forEach(n=>{ const s=n.s||'其他'; srcc[s]=(srcc[s]||0)+1; });
 const srcTxt = Object.entries(srcc).map(([k,v])=>`${SRC_LABEL[k]||k} ${v} 人`).join(' · ');
 document.getElementById('hstats').textContent =
   `${compList.length} 棵谱系树 · ${NODES.length} 位学者 · ${EDGES.length} 条师承边 · ${srcTxt}`;
-document.getElementById('trees-h').textContent = compList.length + ' 棵谱系树（按规模排序）';
 
 // ---------- 以人为中心的视图（academictree 式：向上师承 + 向下学派） ----------
 let focusNode = -1;
@@ -284,25 +275,6 @@ function showPanel(i){
   p.querySelectorAll('a.pl').forEach(a=>a.onclick=()=>{ focus(+a.dataset.i); });
 }
 
-// ---------- 侧栏（谱系树 = 浏览入口，点击树根聚焦） ----------
-const tl=document.getElementById('treelist');
-function syncSidebar(){
-  tl.innerHTML='';
-  compList.forEach((c,ci)=>{
-    const d=document.createElement('div');
-    d.className='titem';
-    d.innerHTML=`<b>${c.display}</b>　${c.size}人 · ${c.maxGen+1}代<br>
-    <span class="meta">根：${c.roots.slice(0,3).join('、')}${c.roots.length>3?'…':''}</span>`;
-    d.onclick=()=>{
-      // 以该树中"辈分最高的根"为起点
-      const rootIdx = c.members.filter(i=>!adjA[i].length)
-        .sort((a,b)=>gen[a]-gen[b])[0];
-      focus(rootIdx!==undefined?rootIdx:c.members[0]);
-    };
-    tl.appendChild(d);
-  });
-}
-syncSidebar();
 
 // ---------- 搜索（下拉候选，选择即以 TA 为中心） ----------
 const sug=document.getElementById('suggest');
