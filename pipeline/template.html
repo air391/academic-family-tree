@@ -147,47 +147,60 @@ function layoutFocus(f){
   // 分层
   const layers = new Map();
   all.forEach(i=>{ const L=layerOf.get(i); if(!layers.has(L)) layers.set(L,[]); layers.get(L).push(i); });
-  // 排序：从焦点向两侧，按已放置邻侧重心
-  const order = new Map();  // i -> 层内序号
-  const place = (L, arr)=>{ order.set(L, arr); arr.forEach((i,k)=>order.set('k'+i,k)); };
-  // 下行：按导师（层 < L）重心
+  // ===== academictree 式紧凑树布局 =====
+  // 1) 每个节点选一个"排版父节点"（视图内层号最近的导师），构成一棵树
+  // 2) 自底向上分配叶子槽位：叶子顺次占槽，父节点取子女槽位均值
+  // 3) 自顶向下逐层排序并保证最小间距（压实但不重叠）
   const maxL = Math.max(...layers.keys()), minL = Math.min(...layers.keys());
-  place(0, [f]);
-  for(let L=1; L<=maxL; L++){
+  const primP = new Map();
+  all.forEach(i=>{
+    if(i===f) return;
+    const ps = adjA[i].filter(a=>all.has(a) && layerOf.get(a)<layerOf.get(i));
+    if(!ps.length) return;
+    ps.sort((x,y)=>layerOf.get(y)-layerOf.get(x));   // 层号大的（更近）优先
+    primP.set(i, ps[0]);
+  });
+  const lc = new Map();   // 排版子女
+  all.forEach(i=>{
+    if(!primP.has(i)) return;
+    const p = primP.get(i);
+    if(!lc.has(p)) lc.set(p, []);
+    lc.get(p).push(i);
+  });
+  let leaf = 0;
+  const rawSlot = new Map();  // 叶子槽位初值
+  for(let L=maxL; L>=minL; L--){
     if(!layers.has(L)) continue;
-    const bc = i=>{
-      const ps = adjA[i].filter(a=>all.has(a)&&layerOf.get(a)<L&&order.has('k'+a));
-      if(!ps.length) return 1e6 + i;
-      return ps.reduce((s,a)=>s+order.get('k'+a),0)/ps.length;
-    };
-    place(L, [...layers.get(L)].sort((x,y)=>bc(x)-bc(y)));
+    for(const i of layers.get(L)){
+      const kids = lc.get(i);
+      rawSlot.set(i, (kids && kids.length)
+        ? kids.reduce((s,k)=>s+rawSlot.get(k),0)/kids.length
+        : leaf++);
+    }
   }
-  // 上行：按学生（层 > L）重心
-  for(let L=-1; L>=minL; L--){
-    if(!layers.has(L)) continue;
-    const bc = i=>{
-      const cs = adjS[i].filter(c=>all.has(c)&&layerOf.get(c)>L&&order.has('k'+c));
-      if(!cs.length) return 1e6 + i;
-      return cs.reduce((s,c)=>s+order.get('k'+c),0)/cs.length;
-    };
-    place(L, [...layers.get(L)].sort((x,y)=>bc(x)-bc(y)));
-  }
-  // 坐标：academictree 式——整幅图高度由最宽层决定，
-  // 其余各层纵向均匀铺开占满整列（单节点层垂直居中），不再从顶部堆叠
+  const GAP = 1, LH = 52, X0 = 190, Y0 = 60;   // 槽位单位：1 槽 = LH 像素，最小间距 1 槽
+  const slot = new Map();
   const pos = new Map();
-  const LH = 52, X0 = 190, Y0 = 60;
-  let maxCount = 0;
-  for(let L=minL; L<=maxL; L++){ if(layers.has(L)) maxCount = Math.max(maxCount, layers.get(L).length); }
-  const H = (maxCount-1) * LH;
-  for(let L=minL; L<=maxL; L++){
+  // 自底向上（层从大到小）：先算槽位（子女已就位），再排序、保最小间距
+  for(let L=maxL; L>=minL; L--){
     if(!layers.has(L)) continue;
-    const arr = order.get(L), n = arr.length;
-    arr.forEach((i,k)=>{
-      const y = n===1 ? Y0 + H/2 : Y0 + k * H/(n-1);
-      pos.set(i,{x:X0+(L-minL)*230, y, L, k});
+    const arr = [...layers.get(L)];
+    arr.forEach(i=>{
+      const kids = lc.get(i);
+      slot.set(i, (kids && kids.length)
+        ? kids.reduce((s,k)=>s+slot.get(k),0)/kids.length
+        : rawSlot.get(i));
+    });
+    arr.sort((a,b)=>slot.get(a)-slot.get(b));
+    let prev = -Infinity;
+    arr.forEach(i=>{
+      let s = slot.get(i);
+      if(s < prev + GAP) s = prev + GAP;
+      prev = s; slot.set(i, s);
+      pos.set(i, {x:X0+(L-minL)*230, y:Y0+s*LH, L});
     });
   }
-  return {pos, all, minL, maxL, layers, order};
+  return {pos, all, minL, maxL, layers};
 }
 
 function render(){
@@ -246,11 +259,22 @@ function render(){
   });
   vp.appendChild(g);
   apply();
-  // 聚焦本人居中（预留左侧师承标签空间）
-  const p=pos.get(focusNode);
-  transform.x = 380 - p.x*transform.k;
-  transform.y = 240 - p.y*transform.k;
-  apply();
+  // 自动缩放：整棵树适配视口（academictree 的 fit-to-view）
+  const svgEl = document.getElementById('svg');
+  const vw = svgEl.clientWidth || 1200, vh = svgEl.clientHeight || 800;
+  let minx=Infinity, miny=Infinity, maxx=-Infinity, maxy=-Infinity;
+  pos.forEach(p=>{
+    if(p.x<minx) minx=p.x; if(p.x>maxx) maxx=p.x;
+    if(p.y<miny) miny=p.y; if(p.y>maxy) maxy=p.y;
+  });
+  if(isFinite(minx)){
+    minx -= 150; maxx += 150; miny -= 50; maxy += 60;   // 留标签空间
+    const bw = maxx-minx, bh = maxy-miny;
+    transform.k = Math.min(1.4, Math.min((vw-380)/bw, (vh-100)/bh));
+    transform.x = (vw-330 - bw*transform.k)/2 - minx*transform.k;
+    transform.y = (vh - bh*transform.k)/2 - miny*transform.k + 12;
+    apply();
+  }
 }
 
 function focus(i){
@@ -323,10 +347,12 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('#searchwrap')) sug.style.display='none';
 });
 
-// ---------- 随机学者 ----------
+// ---------- 随机学者（只抽高校教师：有职称或单位信息的人） ----------
 document.getElementById('wander').onclick=()=>{
-  const i = Math.floor(Math.random()*NODES.length);
-  focus(i);
+  const pool = [];
+  for(let i=0;i<NODES.length;i++){ if(NODES[i].t || NODES[i].af) pool.push(i); }
+  const arr = pool.length ? pool : NODES.map((n,i)=>i);
+  focus(arr[Math.floor(Math.random()*arr.length)]);
 };
 
 // ---------- 缩放/平移 ----------
