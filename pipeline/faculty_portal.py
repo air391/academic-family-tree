@@ -294,6 +294,35 @@ class NameSpace:
         return pid
 
 
+# 机构名清洗：常见别名合并到规范名，去除空白/学位词前缀
+INST_ALIAS = {
+    '中科大': '中国科学技术大学', '中国科技大学': '中国科学技术大学', '科大': '中国科学技术大学',
+    'USTC': '中国科学技术大学', '清华大学': '清华大学', '清华': '清华大学',
+    '北京大学': '北京大学', '北大': '北京大学', '复旦': '复旦大学',
+    '上交大': '上海交通大学', '西安交大': '西安交通大学',
+}
+
+
+def clean_inst(raw):
+    s = re.sub(r'\s+', '', str(raw))
+    s = re.sub(r'^(学士|硕士|博士)研究生[，,]?', '', s)
+    s = re.sub(r'^\d[\d\s.\-/年月日]*', '', s)   # 残留日期前缀
+    return INST_ALIAS.get(s, s)
+
+
+def clean_fields(fields):
+    out = []
+    for f in fields:
+        if re.search(r'[A-Za-z]', f):
+            f = re.sub(r'\s+', ' ', f).strip()   # 含英文：保留单词间隔
+        else:
+            f = re.sub(r'\s+', '', f)
+        f = re.sub(r'^(本科|研究生)\(([^)]+)\)毕业$', r'\2', f)
+        if f:
+            out.append(f)
+    return out
+
+
 def split_item(txt):
     """'1998年9月~2002年6月，中科大，物理学，本科(学士)，学士学位' → (start,end,[fields])"""
     parts = [p.strip() for p in txt.split('，') if p.strip()]
@@ -306,6 +335,9 @@ def split_item(txt):
     else:
         start, end = parts[0], ''
         fields = parts[1:]
+    fields = clean_fields(fields)
+    if fields:
+        fields = [clean_inst(fields[0])] + fields[1:]
     return start, end, fields
 
 
